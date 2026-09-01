@@ -36,11 +36,21 @@ function ChartTooltip({
       <p className="text-xs uppercase tracking-[0.14em] text-muted">
         {format(parseISO(point.date), "EEE, MMM d yyyy")}
       </p>
-      <p className="mt-1 font-mono text-sm font-medium">
+      <p
+        className={`mt-1 font-mono text-sm font-medium ${
+          point.balance < 0 ? "text-red-600" : ""
+        }`}
+      >
         {formatMoney(point.balance, currency)}
       </p>
     </div>
   );
+}
+
+function zeroSplit(min: number, max: number): number {
+  if (max <= 0) return 0;
+  if (min >= 0) return 1;
+  return max / (max - min);
 }
 
 export function ForecastChart({ forecast, currency }: Props) {
@@ -53,7 +63,13 @@ export function ForecastChart({ forecast, currency }: Props) {
     [forecast.points],
   );
 
-  const crossesZero = forecast.minBalance < 0 && forecast.maxBalance > 0;
+  const yMin = forecast.minBalance;
+  const yMax =
+    forecast.maxBalance === forecast.minBalance
+      ? forecast.maxBalance + 1
+      : forecast.maxBalance;
+  const underZero = forecast.minBalance < 0;
+  const split = zeroSplit(yMin, yMax);
 
   return (
     <div className="h-[280px] w-full sm:h-[320px]">
@@ -61,8 +77,12 @@ export function ForecastChart({ forecast, currency }: Props) {
         <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="cashFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#1f7a6e" stopOpacity={0.32} />
-              <stop offset="100%" stopColor="#1f7a6e" stopOpacity={0.02} />
+              <stop offset={split} stopColor="#1f7a6e" stopOpacity={0.32} />
+              <stop offset={split} stopColor="#dc2626" stopOpacity={0.38} />
+            </linearGradient>
+            <linearGradient id="cashStroke" x1="0" y1="0" x2="0" y2="1">
+              <stop offset={split} stopColor="#0f4f47" />
+              <stop offset={split} stopColor="#dc2626" />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="#c5d4cd" strokeDasharray="0" vertical={false} />
@@ -76,6 +96,7 @@ export function ForecastChart({ forecast, currency }: Props) {
             tickLine={false}
           />
           <YAxis
+            domain={[yMin, yMax]}
             tickFormatter={(value) =>
               new Intl.NumberFormat("en-US", {
                 notation: "compact",
@@ -89,17 +110,18 @@ export function ForecastChart({ forecast, currency }: Props) {
           />
           <Tooltip
             content={<ChartTooltip currency={currency} />}
-            cursor={{ stroke: "#0f4f47", strokeWidth: 1 }}
+            cursor={{ stroke: underZero ? "#dc2626" : "#0f4f47", strokeWidth: 1 }}
           />
-          {crossesZero ? (
-            <ReferenceLine y={0} stroke="#c0562a" strokeDasharray="4 4" />
+          {underZero ? (
+            <ReferenceLine y={0} stroke="#dc2626" strokeDasharray="4 4" />
           ) : null}
           <Area
             type="stepAfter"
             dataKey="balance"
-            stroke="#0f4f47"
+            stroke="url(#cashStroke)"
             strokeWidth={2}
             fill="url(#cashFill)"
+            baseValue={yMin}
             isAnimationActive={false}
           />
         </AreaChart>
