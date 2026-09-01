@@ -12,8 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatMoney, formatShortDate } from "@/lib/format";
-import type { Forecast } from "@/lib/types";
+import { formatMoney, formatShortDate, type Forecast } from "@/lib/types";
 
 type Props = {
   forecast: Forecast;

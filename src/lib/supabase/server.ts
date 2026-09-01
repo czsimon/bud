@@ -1,13 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { supabaseAnonKey, supabaseUrl } from "@/lib/config";
+import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/client";
 
 export async function createClient() {
   const url = supabaseUrl();
   const key = supabaseAnonKey();
-  if (!url || !key) {
-    throw new Error("Supabase is not configured");
-  }
 
   const cookieStore = await cookies();
 

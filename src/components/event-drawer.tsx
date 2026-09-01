@@ -1,15 +1,24 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { CADENCES } from "@/lib/types";
-import { cadenceLabel } from "@/lib/format";
-import type { BudgetEvent, Cadence, EventDraft, EventKind, Flow } from "@/lib/types";
+import {
+  CADENCES,
+  cadenceLabel,
+  type BudgetEvent,
+  type Cadence,
+  type Category,
+  type EventDraft,
+  type EventKind,
+  type Flow,
+} from "@/lib/types";
 
 type Props = {
   open: boolean;
   event: BudgetEvent | null;
+  categories: Category[];
   onClose: () => void;
   onSave: (draft: EventDraft) => Promise<void> | void;
+  onCreateCategory: (name: string) => Promise<Category>;
   onDelete?: (id: string) => Promise<void> | void;
 };
 
@@ -23,23 +32,26 @@ const emptyDraft = (): EventDraft => ({
   endDate: null,
   person: "shared",
   notes: "",
+  categoryId: null,
 });
 
-export function EventDrawer({ open, event, onClose, onSave, onDelete }: Props) {
+export function EventDrawer({
+  open,
+  event,
+  categories,
+  onClose,
+  onSave,
+  onCreateCategory,
+  onDelete,
+}: Props) {
   const titleId = useId();
-  const [draft, setDraft] = useState<EventDraft>(emptyDraft());
+  const [draft, setDraft] = useState<EventDraft>(() =>
+    event ? { ...event } : emptyDraft(),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    setError(null);
-    if (event) {
-      setDraft({ ...event });
-    } else {
-      setDraft(emptyDraft());
-    }
-  }, [open, event]);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [addingCategory, setAddingCategory] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -74,6 +86,7 @@ export function EventDrawer({ open, event, onClose, onSave, onDelete }: Props) {
         name: draft.name.trim(),
         notes: draft.notes?.trim() || null,
         person: draft.person?.trim() || null,
+        categoryId: draft.flow === "out" ? draft.categoryId || null : null,
         endDate: draft.kind === "one_off" ? null : draft.endDate || null,
         cadence: draft.kind === "one_off" ? null : draft.cadence,
       });
@@ -217,6 +230,66 @@ export function EventDrawer({ open, event, onClose, onSave, onDelete }: Props) {
                 <option value="shared">Shared / household</option>
               </select>
             </Field>
+
+            {draft.flow === "out" ? (
+              <div className="space-y-2">
+                <Field label="Category">
+                  <select
+                    value={draft.categoryId ?? ""}
+                    onChange={(e) =>
+                      setDraft({ ...draft, categoryId: e.target.value || null })
+                    }
+                    className="field"
+                  >
+                    <option value="">Uncategorized</option>
+                    {[...categories]
+                      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+                      .map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+                <div className="flex gap-2">
+                  <input
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    placeholder="Add a category"
+                    className="field flex-1"
+                  />
+                  <button
+                    type="button"
+                    className="btn-ghost shrink-0"
+                    disabled={addingCategory}
+                    onClick={async () => {
+                      const trimmed = newCategoryName.trim();
+                      if (!trimmed) {
+                        setError("Give the new category a name.");
+                        return;
+                      }
+                      setAddingCategory(true);
+                      setError(null);
+                      try {
+                        const created = await onCreateCategory(trimmed);
+                        setDraft((current) => ({ ...current, categoryId: created.id }));
+                        setNewCategoryName("");
+                      } catch (err) {
+                        setError(
+                          err instanceof Error
+                            ? err.message
+                            : "Could not add that category.",
+                        );
+                      } finally {
+                        setAddingCategory(false);
+                      }
+                    }}
+                  >
+                    {addingCategory ? "Adding…" : "Add"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <Field label="Notes">
               <textarea

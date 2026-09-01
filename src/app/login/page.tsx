@@ -1,11 +1,11 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { isSupabaseConfigured } from "@/lib/config";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function LoginPage() {
-  const configured = isSupabaseConfigured();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -34,7 +34,8 @@ export default function LoginPage() {
           password,
         });
         if (signInError) throw signInError;
-        window.location.href = "/";
+        router.replace("/");
+        router.refresh();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed.");
@@ -54,21 +55,7 @@ export default function LoginPage() {
         Supabase project.
       </p>
 
-      {!configured ? (
-        <div className="mt-8 rounded-xl border border-rule bg-surface p-5 text-sm">
-          <p className="font-medium">Supabase isn’t configured yet.</p>
-          <p className="mt-2 text-muted">
-            Copy <span className="font-mono text-ink">.env.example</span> to{" "}
-            <span className="font-mono text-ink">.env.local</span>, add your
-            project URL and anon key, then run the SQL in{" "}
-            <span className="font-mono text-ink">supabase/schema.sql</span>.
-          </p>
-          <a href="/" className="btn-solid mt-4 inline-flex">
-            Open local preview
-          </a>
-        </div>
-      ) : (
-        <form onSubmit={onSubmit} className="mt-8 space-y-3 rounded-xl border border-rule bg-surface p-5">
+      <form onSubmit={onSubmit} className="mt-8 space-y-3 rounded-xl border border-rule bg-surface p-5">
           <label className="block">
             <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
               Email
@@ -112,8 +99,7 @@ export default function LoginPage() {
               ? "Need an account? Create one"
               : "Already have an account? Sign in"}
           </button>
-        </form>
-      )}
+      </form>
     </main>
   );
 }

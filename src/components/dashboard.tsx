@@ -1,57 +1,67 @@
 "use client";
 
 import { addMonths, startOfDay } from "date-fns";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { CategoryList } from "@/components/category-list";
 import { EventDrawer } from "@/components/event-drawer";
 import { EventTable } from "@/components/event-table";
 import { ForecastChart } from "@/components/forecast-chart";
 import { buildForecast } from "@/lib/forecast";
-import { formatMoney } from "@/lib/format";
-import { localStore } from "@/lib/local-store";
 import * as remote from "@/lib/supabase/data";
-import type { BudgetEvent, EventDraft, Profile } from "@/lib/types";
+import {
+  CATEGORY_COLORS,
+  formatMoney,
+  type BudgetEvent,
+  type Category,
+  type CategoryDraft,
+  type EventDraft,
+  type Profile,
+} from "@/lib/types";
 
 type Filter = "all" | "in" | "out" | "recurring" | "one_off";
 
 type Props = {
-  mode: "local" | "supabase";
-  email?: string | null;
+  email: string | null;
 };
 
-export function Dashboard({ mode, email }: Props) {
+export function Dashboard({ email }: Props) {
+  const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [events, setEvents] = useState<BudgetEvent[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetEvent | null>(null);
   const [balanceDraft, setBalanceDraft] = useState("");
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      if (mode === "local") {
-        const snap = localStore.load();
-        setProfile(snap.profile);
-        setEvents(snap.events);
-        setBalanceDraft(String(snap.profile.startingBalance));
-      } else {
-        const snap = await remote.fetchHousehold();
-        setProfile(snap.profile);
-        setEvents(snap.events);
-        setBalanceDraft(String(snap.profile.startingBalance));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load your ledger.");
-    } finally {
-      setLoading(false);
-    }
-  }, [mode]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+
+    remote
+      .fetchHousehold()
+      .then((snap) => {
+        if (cancelled) return;
+        setProfile(snap.profile);
+        setEvents(snap.events);
+        setCategories(snap.categories);
+        setBalanceDraft(String(snap.profile.startingBalance));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not load your ledger.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const forecast = useMemo(() => {
     if (!profile) {
@@ -66,8 +76,7 @@ export function Dashboard({ mode, email }: Props) {
     const previous = profile;
     setProfile(next);
     try {
-      if (mode === "local") localStore.saveProfile(next);
-      else await remote.saveProfile(next);
+      await remote.saveProfile(next);
     } catch (err) {
       if (previous) setProfile(previous);
       setError(err instanceof Error ? err.message : "Could not save settings.");
@@ -75,14 +84,6 @@ export function Dashboard({ mode, email }: Props) {
   }
 
   async function handleSave(draft: EventDraft) {
-    if (mode === "local") {
-      const saved = localStore.upsertEvent(draft);
-      setEvents((prev) => {
-        const exists = prev.some((e) => e.id === saved.id);
-        return exists ? prev.map((e) => (e.id === saved.id ? saved : e)) : [...prev, saved];
-      });
-      return;
-    }
     if (!profile) return;
     const saved = await remote.upsertEvent(draft, profile.id);
     setEvents((prev) => {
@@ -92,16 +93,60 @@ export function Dashboard({ mode, email }: Props) {
   }
 
   async function handleDelete(id: string) {
-    if (mode === "local") localStore.deleteEvent(id);
-    else await remote.deleteEvent(id);
+    await remote.deleteEvent(id);
     setEvents((prev) => prev.filter((e) => e.id !== id));
   }
 
-  async function handleSignOut() {
-    if (mode === "supabase") {
-      await remote.signOut();
-      window.location.href = "/login";
+  async function persistCategory(draft: CategoryDraft): Promise<Category> {
+    if (!profile) throw new Error("Not signed in");
+    const saved = await remote.upsertCategory(draft, profile.id);
+    setCategories((prev) => {
+      const exists = prev.some((c) => c.id === saved.id);
+      return exists
+        ? prev.map((c) => (c.id === saved.id ? saved : c))
+        : [...prev, saved];
+    });
+    return saved;
+  }
+
+  async function handleSaveCategory(draft: CategoryDraft) {
+    try {
+      await persistCategory(draft);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that category.");
+      throw err;
     }
+  }
+
+  async function handleCreateCategory(name: string): Promise<Category> {
+    const trimmed = name.trim();
+    const existing = categories.find(
+      (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (existing) return existing;
+    const nextPosition = categories.reduce((max, c) => Math.max(max, c.position), -1) + 1;
+    const color =
+      CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length] ?? CATEGORY_COLORS[0];
+    return persistCategory({ name: trimmed, color, position: nextPosition });
+  }
+
+  async function handleDeleteCategory(id: string) {
+    try {
+      await remote.deleteCategory(id);
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      setEvents((prev) =>
+        prev.map((e) => (e.categoryId === id ? { ...e, categoryId: null } : e)),
+      );
+      if (categoryFilter === id) setCategoryFilter("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete that category.");
+    }
+  }
+
+  async function handleSignOut() {
+    await remote.signOut();
+    router.replace("/login");
+    router.refresh();
   }
 
   if (loading) {
@@ -139,18 +184,10 @@ export function Dashboard({ mode, email }: Props) {
             </p>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            {mode === "local" ? (
-              <span className="rounded-full bg-mint/60 px-2.5 py-1 text-xs text-teal-deep">
-                Local preview
-              </span>
-            ) : (
-              <span className="max-w-[180px] truncate text-muted">{email}</span>
-            )}
-            {mode === "supabase" ? (
-              <button type="button" className="btn-ghost py-1.5" onClick={handleSignOut}>
-                Sign out
-              </button>
-            ) : null}
+            <span className="max-w-[180px] truncate text-muted">{email}</span>
+            <button type="button" className="btn-ghost py-1.5" onClick={handleSignOut}>
+              Sign out
+            </button>
           </div>
         </div>
       </header>
@@ -159,14 +196,6 @@ export function Dashboard({ mode, email }: Props) {
         {error ? (
           <p className="rounded-md border border-copper/40 bg-surface px-3 py-2 text-sm text-warn">
             {error}
-          </p>
-        ) : null}
-
-        {mode === "local" ? (
-          <p className="rounded-md border border-rule bg-surface px-3 py-2 text-sm text-muted">
-            This session is saved in this browser. Add your Supabase URL and anon
-            key in <span className="font-mono text-ink">.env.local</span> to persist
-            a household account.
           </p>
         ) : null}
 
@@ -251,12 +280,16 @@ export function Dashboard({ mode, email }: Props) {
           </div>
         </section>
 
+        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <EventTable
           events={events}
+          categories={categories}
           forecast={forecast}
           currency={profile.currency}
           filter={filter}
+          categoryFilter={categoryFilter}
           onFilter={setFilter}
+          onCategoryFilter={setCategoryFilter}
           onAdd={() => {
             setEditing(null);
             setDrawerOpen(true);
@@ -266,15 +299,32 @@ export function Dashboard({ mode, email }: Props) {
             setDrawerOpen(true);
           }}
         />
+
+        <CategoryList
+          categories={categories}
+          usage={Object.fromEntries(
+            categories.map((c) => [
+              c.id,
+              events.filter((e) => e.categoryId === c.id).length,
+            ]),
+          )}
+          onSave={handleSaveCategory}
+          onDelete={handleDeleteCategory}
+        />
+        </div>
       </main>
 
-      <EventDrawer
-        open={drawerOpen}
-        event={editing}
-        onClose={() => setDrawerOpen(false)}
-        onSave={handleSave}
-        onDelete={handleDelete}
-      />
+      {drawerOpen ? (
+        <EventDrawer
+          open
+          event={editing}
+          categories={categories}
+          onClose={() => setDrawerOpen(false)}
+          onSave={handleSave}
+          onCreateCategory={handleCreateCategory}
+          onDelete={handleDelete}
+        />
+      ) : null}
     </div>
   );
 }

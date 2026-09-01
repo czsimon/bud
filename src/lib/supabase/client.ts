@@ -1,11 +1,25 @@
 import { createBrowserClient } from "@supabase/ssr";
-import { supabaseAnonKey, supabaseUrl } from "@/lib/config";
+
+export function supabaseUrl(): string {
+  const value = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!value) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL is required");
+  }
+  return value;
+}
+
+export function supabaseAnonKey(): string {
+  const value =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!value) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is required",
+    );
+  }
+  return value;
+}
 
 export function createClient() {
-  const url = supabaseUrl();
-  const key = supabaseAnonKey();
-  if (!url || !key) {
-    throw new Error("Supabase is not configured");
-  }
-  return createBrowserClient(url, key);
+  return createBrowserClient(supabaseUrl(), supabaseAnonKey());
 }
