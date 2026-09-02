@@ -63,13 +63,16 @@ export function EventTable({
   });
 
   return (
-    <section className="overflow-hidden rounded-xl border border-rule bg-surface">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-3 sm:px-5">
-        <div>
-          <h2 className="text-lg font-medium">Events</h2>
-          <p className="text-sm text-muted">
-            Recurring pay, household budgets, and one-time hits.
-          </p>
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-rule bg-surface lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+      <div className="flex flex-col gap-3 border-b border-rule px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-medium">Events</h2>
+            <p className="text-sm text-muted">Pay, budgets, and one-offs.</p>
+          </div>
+          <button type="button" className="btn-solid shrink-0" onClick={onAdd}>
+            Add
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <FilterPills value={filter} onChange={onFilter} />
@@ -77,7 +80,7 @@ export function EventTable({
             <select
               value={categoryFilter}
               onChange={(e) => onCategoryFilter(e.target.value)}
-              className="field w-auto py-1 text-xs"
+              className="field w-full py-1 text-xs"
               aria-label="Filter by category"
             >
               <option value="">All categories</option>
@@ -90,99 +93,64 @@ export function EventTable({
                 ))}
             </select>
           ) : null}
-          <button type="button" className="btn-solid" onClick={onAdd}>
-            Add event
-          </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-rule text-[11px] uppercase tracking-[0.14em] text-muted">
-              <th className="px-4 py-2 font-medium sm:px-5">Name</th>
-              <th className="px-3 py-2 font-medium">Category</th>
-              <th className="px-3 py-2 font-medium">Who</th>
-              <th className="px-3 py-2 font-medium">Cadence</th>
-              <th className="px-3 py-2 font-medium">Next / date</th>
-              <th className="px-4 py-2 text-right font-medium sm:px-5">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-12 text-center text-muted">
-                  {events.length === 0
-                    ? "No events yet. Add salaries, rent, or a one-off like a vacation."
-                    : "Nothing matches this filter."}
-                </td>
-              </tr>
-            ) : (
-              filtered.map((event) => {
-                const next = nextDate(event, from, to);
-                const delta = event.flow === "in" ? event.amount : -event.amount;
-                const category =
-                  event.flow === "out" && event.categoryId
-                    ? byId.get(event.categoryId)
-                    : undefined;
-                return (
-                  <tr
-                    key={event.id}
-                    className="cursor-pointer border-b border-rule/70 last:border-0 hover:bg-paper/70"
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {filtered.length === 0 ? (
+          <p className="px-4 py-12 text-center text-sm text-muted">
+            {events.length === 0
+              ? "No events yet. Add salaries, rent, or a one-off like a vacation."
+              : "Nothing matches this filter."}
+          </p>
+        ) : (
+          <ul>
+            {filtered.map((event) => {
+              const next = nextDate(event, from, to);
+              const delta = event.flow === "in" ? event.amount : -event.amount;
+              const category =
+                event.flow === "out" && event.categoryId
+                  ? byId.get(event.categoryId)
+                  : undefined;
+              return (
+                <li key={event.id}>
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-3 border-b border-rule/70 px-4 py-3 text-left hover:bg-paper/70"
                     onClick={() => onEdit(event)}
                   >
-                    <td className="px-4 py-3 sm:px-5">
-                      <div className="flex items-start gap-3">
-                        <span
-                          className={`mt-0.5 h-8 w-1 shrink-0 rounded-full ${
-                            event.flow === "in" ? "bg-teal" : "bg-copper"
-                          }`}
-                        />
-                        <div>
-                          <p className="font-medium">{event.name}</p>
-                          {event.notes ? (
-                            <p className="mt-0.5 max-w-sm truncate text-muted">
-                              {event.notes}
-                            </p>
-                          ) : null}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3">
-                      {category ? (
-                        <span className="inline-flex items-center gap-1.5 text-muted">
-                          <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ background: category.color }}
-                          />
-                          {category.name}
-                        </span>
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-muted">{personLabel(event.person)}</td>
-                    <td className="px-3 py-3">{cadenceLabel(event.cadence, event.kind)}</td>
-                    <td className="px-3 py-3 font-mono text-[13px] text-muted">
-                      {next ? formatDate(next) : "—"}
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-right font-mono text-[13px] font-medium sm:px-5 ${
-                        event.flow === "in" ? "text-teal-deep" : "text-copper"
+                    <span
+                      className={`mt-1 h-8 w-1 shrink-0 rounded-full ${
+                        event.flow === "in" ? "bg-teal" : "bg-copper"
                       }`}
-                    >
-                      {formatMoney(delta, currency, { sign: true })}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="truncate font-medium">{event.name}</span>
+                        <span
+                          className={`shrink-0 font-mono text-[13px] font-medium ${
+                            event.flow === "in" ? "text-teal-deep" : "text-copper"
+                          }`}
+                        >
+                          {formatMoney(delta, currency, { sign: true })}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-muted">
+                        {category ? `${category.name} · ` : ""}
+                        {cadenceLabel(event.cadence, event.kind)}
+                        {next ? ` · ${formatDate(next)}` : ""}
+                        {` · ${personLabel(event.person)}`}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
-      <p className="border-t border-rule px-5 py-2 text-xs text-muted">
-        {forecast.occurrences.length} cash movements in this horizon · click a row to
-        edit
+      <p className="border-t border-rule px-4 py-2 text-xs text-muted">
+        {forecast.occurrences.length} cash movements in this horizon
       </p>
     </section>
   );

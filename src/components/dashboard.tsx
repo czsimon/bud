@@ -176,7 +176,7 @@ export function Dashboard({ email }: Props) {
   return (
     <div className="min-h-full">
       <header className="border-b border-rule/80 bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-none items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-baseline gap-3">
             <p className="text-lg font-semibold tracking-tight">Bud</p>
             <p className="hidden text-sm text-muted sm:block">
@@ -192,13 +192,14 @@ export function Dashboard({ email }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+      <main className="grid gap-5 px-4 py-6 sm:px-6 sm:py-8 lg:grid-cols-3 lg:items-start">
         {error ? (
-          <p className="rounded-md border border-copper/40 bg-surface px-3 py-2 text-sm text-warn">
+          <p className="rounded-md border border-copper/40 bg-surface px-3 py-2 text-sm text-warn lg:col-span-3">
             {error}
           </p>
         ) : null}
 
+        <div className="space-y-5 lg:col-span-2">
         <section className="overflow-hidden rounded-xl border border-rule bg-surface">
           <div className="flex flex-col gap-4 border-b border-rule px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
             <div>
@@ -280,7 +281,19 @@ export function Dashboard({ email }: Props) {
           </div>
         </section>
 
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <CategoryList
+          categories={categories}
+          usage={Object.fromEntries(
+            categories.map((c) => [
+              c.id,
+              events.filter((e) => e.categoryId === c.id).length,
+            ]),
+          )}
+          onSave={handleSaveCategory}
+          onDelete={handleDeleteCategory}
+        />
+        </div>
+
         <EventTable
           events={events}
           categories={categories}
@@ -299,19 +312,6 @@ export function Dashboard({ email }: Props) {
             setDrawerOpen(true);
           }}
         />
-
-        <CategoryList
-          categories={categories}
-          usage={Object.fromEntries(
-            categories.map((c) => [
-              c.id,
-              events.filter((e) => e.categoryId === c.id).length,
-            ]),
-          )}
-          onSave={handleSaveCategory}
-          onDelete={handleDeleteCategory}
-        />
-        </div>
       </main>
 
       {drawerOpen ? (

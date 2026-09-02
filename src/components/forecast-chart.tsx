@@ -52,6 +52,21 @@ function zeroSplit(min: number, max: number): number {
   return max / (max - min);
 }
 
+const AXIS_UNIT = 10000;
+
+// Snap the axis to 10k boundaries and keep gridline labels on round numbers.
+function axisBounds(min: number, max: number) {
+  const low = Math.floor(min / AXIS_UNIT) * AXIS_UNIT;
+  const high = Math.max(Math.ceil(max / AXIS_UNIT) * AXIS_UNIT, low + AXIS_UNIT);
+  const step = AXIS_UNIT * Math.ceil((high - low) / AXIS_UNIT / 6);
+  const ticks: number[] = [];
+  for (let value = low; value <= high; value += step) {
+    ticks.push(value);
+  }
+  if (ticks[ticks.length - 1] !== high) ticks.push(high);
+  return { low, high, ticks };
+}
+
 export function ForecastChart({ forecast, currency }: Props) {
   const data = useMemo(
     () =>
@@ -62,11 +77,10 @@ export function ForecastChart({ forecast, currency }: Props) {
     [forecast.points],
   );
 
-  const yMin = forecast.minBalance;
-  const yMax =
-    forecast.maxBalance === forecast.minBalance
-      ? forecast.maxBalance + 1
-      : forecast.maxBalance;
+  const { low: yMin, high: yMax, ticks } = useMemo(
+    () => axisBounds(forecast.minBalance, forecast.maxBalance),
+    [forecast.minBalance, forecast.maxBalance],
+  );
   const underZero = forecast.minBalance < 0;
   const split = zeroSplit(yMin, yMax);
 
@@ -96,6 +110,7 @@ export function ForecastChart({ forecast, currency }: Props) {
           />
           <YAxis
             domain={[yMin, yMax]}
+            ticks={ticks}
             tickFormatter={(value) =>
               new Intl.NumberFormat("en-US", {
                 notation: "compact",
