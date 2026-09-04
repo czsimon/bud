@@ -3,7 +3,6 @@
 import { addMonths, startOfDay } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CategoryList } from "@/components/category-list";
 import { EventDrawer } from "@/components/event-drawer";
 import { EventTable } from "@/components/event-table";
 import { ForecastChart } from "@/components/forecast-chart";
@@ -33,7 +32,6 @@ export function Dashboard({ email }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetEvent | null>(null);
   const [balanceDraft, setBalanceDraft] = useState("");
@@ -130,19 +128,6 @@ export function Dashboard({ email }: Props) {
     return persistCategory({ name: trimmed, color, position: nextPosition });
   }
 
-  async function handleDeleteCategory(id: string) {
-    try {
-      await remote.deleteCategory(id);
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-      setEvents((prev) =>
-        prev.map((e) => (e.categoryId === id ? { ...e, categoryId: null } : e)),
-      );
-      if (categoryFilter === id) setCategoryFilter("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete that category.");
-    }
-  }
-
   async function handleSignOut() {
     await remote.signOut();
     router.replace("/login");
@@ -184,7 +169,7 @@ export function Dashboard({ email }: Props) {
             </p>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <span className="max-w-[180px] truncate text-muted">{email}</span>
+            <span className="max-w-45 truncate text-muted">{email}</span>
             <button type="button" className="btn-ghost py-1.5" onClick={handleSignOut}>
               Sign out
             </button>
@@ -192,14 +177,13 @@ export function Dashboard({ email }: Props) {
         </div>
       </header>
 
-      <main className="grid gap-5 px-4 py-6 sm:px-6 sm:py-8 lg:grid-cols-3 lg:items-start">
+      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6 sm:py-8">
         {error ? (
-          <p className="rounded-md border border-copper/40 bg-surface px-3 py-2 text-sm text-warn lg:col-span-3">
+          <p className="rounded-md border border-copper/40 bg-surface px-3 py-2 text-sm text-warn">
             {error}
           </p>
         ) : null}
 
-        <div className="space-y-5 lg:col-span-2">
         <section className="overflow-hidden rounded-xl border border-rule bg-surface">
           <div className="flex flex-col gap-4 border-b border-rule px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
             <div>
@@ -281,28 +265,13 @@ export function Dashboard({ email }: Props) {
           </div>
         </section>
 
-        <CategoryList
-          categories={categories}
-          usage={Object.fromEntries(
-            categories.map((c) => [
-              c.id,
-              events.filter((e) => e.categoryId === c.id).length,
-            ]),
-          )}
-          onSave={handleSaveCategory}
-          onDelete={handleDeleteCategory}
-        />
-        </div>
-
         <EventTable
           events={events}
           categories={categories}
           forecast={forecast}
           currency={profile.currency}
           filter={filter}
-          categoryFilter={categoryFilter}
           onFilter={setFilter}
-          onCategoryFilter={setCategoryFilter}
           onAdd={() => {
             setEditing(null);
             setDrawerOpen(true);
@@ -311,6 +280,7 @@ export function Dashboard({ email }: Props) {
             setEditing(event);
             setDrawerOpen(true);
           }}
+          onSaveCategory={handleSaveCategory}
         />
       </main>
 

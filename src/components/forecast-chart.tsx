@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatMoney, formatShortDate, type Forecast } from "@/lib/types";
+import { formatMoney, type Forecast } from "@/lib/types";
 
 type Props = {
   forecast: Forecast;
@@ -46,13 +46,34 @@ function ChartTooltip({
   );
 }
 
-function zeroSplit(min: number, max: number): number {
-  if (max <= 0) return 0;
-  if (min >= 0) return 1;
-  return max / (max - min);
+// Gradient offsets are relative to each path's own bounding box, so the zero
+// crossing has to be measured against that path's value span — not the axis.
+function zeroSplit(top: number, bottom: number): number {
+  if (top <= 0) return 0;
+  if (bottom >= 0) return 1;
+  return top / (top - bottom);
 }
 
 const AXIS_UNIT = 10000;
+
+function timeOf(iso: string): number {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day).getTime();
+}
+
+function monthTicks(fromIso: string, toIso: string): number[] {
+  const ticks: number[] = [];
+  const end = timeOf(toIso);
+  let cursor = new Date(Number(fromIso.slice(0, 4)), Number(fromIso.slice(5, 7)) - 1, 1);
+  if (cursor.getTime() < timeOf(fromIso)) {
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  while (cursor.getTime() <= end) {
+    ticks.push(cursor.getTime());
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return ticks;
+}
 
 // Snap the axis to 10k boundaries and keep gridline labels on round numbers.
 function axisBounds(min: number, max: number) {
@@ -72,7 +93,7 @@ export function ForecastChart({ forecast, currency }: Props) {
     () =>
       forecast.points.map((p) => ({
         ...p,
-        label: formatShortDate(p.date),
+        t: timeOf(p.date),
       })),
     [forecast.points],
   );
@@ -81,8 +102,16 @@ export function ForecastChart({ forecast, currency }: Props) {
     () => axisBounds(forecast.minBalance, forecast.maxBalance),
     [forecast.minBalance, forecast.maxBalance],
   );
+  const monthTickTimes = useMemo(
+    () => monthTicks(forecast.from, forecast.to),
+    [forecast.from, forecast.to],
+  );
+  const monthTickFormat = forecast.from.slice(0, 4) === forecast.to.slice(0, 4) ? "MMM" : "MMM yy";
   const underZero = forecast.minBalance < 0;
-  const split = zeroSplit(yMin, yMax);
+  // The filled area runs from the highest balance down to the axis floor, while
+  // the line only covers the balances themselves.
+  const fillSplit = zeroSplit(forecast.maxBalance, yMin);
+  const strokeSplit = zeroSplit(forecast.maxBalance, forecast.minBalance);
 
   return (
     <div className="h-[280px] w-full sm:h-[320px]">
@@ -90,20 +119,28 @@ export function ForecastChart({ forecast, currency }: Props) {
         <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="cashFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset={split} stopColor="#1f7a6e" stopOpacity={0.32} />
-              <stop offset={split} stopColor="#dc2626" stopOpacity={0.38} />
+              <stop offset={fillSplit} stopColor="#1f7a6e" stopOpacity={0.32} />
+              <stop offset={fillSplit} stopColor="#dc2626" stopOpacity={0.38} />
             </linearGradient>
             <linearGradient id="cashStroke" x1="0" y1="0" x2="0" y2="1">
-              <stop offset={split} stopColor="#0f4f47" />
-              <stop offset={split} stopColor="#dc2626" />
+              <stop offset={strokeSplit} stopColor="#0f4f47" />
+              <stop offset={strokeSplit} stopColor="#dc2626" />
             </linearGradient>
           </defs>
           <CartesianGrid stroke="#c5d4cd" strokeDasharray="0" vertical={false} />
+          <CartesianGrid
+            stroke="#9aa8a2"
+            strokeDasharray="4 4"
+            horizontal={false}
+          />
           <XAxis
-            dataKey="date"
-            tickFormatter={(value) => format(parseISO(value), "MMM")}
-            interval="preserveStartEnd"
-            minTickGap={48}
+            dataKey="t"
+            type="number"
+            scale="time"
+            domain={["dataMin", "dataMax"]}
+            ticks={monthTickTimes}
+            interval={0}
+            tickFormatter={(value) => format(new Date(value as number), monthTickFormat)}
             tick={{ fill: "#5c7069", fontSize: 12 }}
             axisLine={{ stroke: "#c5d4cd" }}
             tickLine={false}

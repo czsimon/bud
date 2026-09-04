@@ -1,18 +1,33 @@
 "use client";
 
 import { addDays, formatISO, startOfDay } from "date-fns";
+import { useState } from "react";
 import { eventOccurrences } from "@/lib/forecast";
 import {
+  CATEGORY_COLORS,
   cadenceLabel,
   formatDate,
   formatMoney,
   personLabel,
   type BudgetEvent,
   type Category,
+  type CategoryDraft,
   type Forecast,
 } from "@/lib/types";
 
 type Filter = "all" | "in" | "out" | "recurring" | "one_off";
+type SortColumn = "name" | "category" | "who" | "schedule" | "next" | "amount";
+type SortDir = "asc" | "desc";
+type SortState = { column: SortColumn; dir: SortDir };
+
+type Row = {
+  event: BudgetEvent;
+  next: string | null;
+  categoryName: string;
+  who: string;
+  schedule: string;
+  amount: number;
+};
 
 type Props = {
   events: BudgetEvent[];
@@ -20,11 +35,10 @@ type Props = {
   forecast: Forecast;
   currency: string;
   filter: Filter;
-  categoryFilter: string;
   onFilter: (filter: Filter) => void;
-  onCategoryFilter: (id: string) => void;
   onAdd: () => void;
   onEdit: (event: BudgetEvent) => void;
+  onSaveCategory: (draft: CategoryDraft) => Promise<void> | void;
 };
 
 function nextDate(event: BudgetEvent, from: Date, to: Date): string | null {
@@ -34,123 +48,312 @@ function nextDate(event: BudgetEvent, from: Date, to: Date): string | null {
     : event.startDate;
 }
 
+function originalCompare(a: Row, b: Row) {
+  const dateCompare = (a.next ?? a.event.startDate).localeCompare(
+    b.next ?? b.event.startDate,
+  );
+  if (dateCompare !== 0) return dateCompare;
+  return a.event.name.localeCompare(b.event.name);
+}
+
+function compareText(a: string, b: string) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function compareColumn(a: Row, b: Row, column: SortColumn) {
+  switch (column) {
+    case "name":
+      return compareText(a.event.name, b.event.name);
+    case "category":
+      return compareText(a.categoryName, b.categoryName);
+    case "who":
+      return compareText(a.who, b.who);
+    case "schedule":
+      return compareText(a.schedule, b.schedule);
+    case "next":
+      return (a.next ?? a.event.startDate).localeCompare(b.next ?? b.event.startDate);
+    case "amount":
+      return a.amount - b.amount;
+  }
+}
+
+function SortHeader({
+  label,
+  column,
+  sort,
+  onCycle,
+  className,
+  align = "left",
+}: {
+  label: string;
+  column: SortColumn;
+  sort: SortState | null;
+  onCycle: (column: SortColumn) => void;
+  className: string;
+  align?: "left" | "right";
+}) {
+  const active = sort?.column === column;
+  const dir = active ? sort.dir : null;
+  const ariaSort = dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none";
+  const nextHint =
+    dir === "asc" ? "descending" : dir === "desc" ? "original order" : "ascending";
+
+  return (
+    <th aria-sort={ariaSort} className={`${className} font-medium`}>
+      <button
+        type="button"
+        onClick={() => onCycle(column)}
+        aria-label={`Sort by ${label}, ${nextHint}`}
+        className={`inline-flex w-full items-center gap-1.5 hover:text-ink ${
+          align === "right" ? "justify-end" : ""
+        } ${active ? "text-ink" : ""}`}
+      >
+        {label}
+        <span className={`font-mono text-[10px] ${active ? "text-ink" : "text-muted/50"}`}>
+          {dir === "asc" ? "↑" : dir === "desc" ? "↓" : "↕"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
 export function EventTable({
   events,
   categories,
   forecast,
   currency,
   filter,
-  categoryFilter,
   onFilter,
-  onCategoryFilter,
   onAdd,
   onEdit,
+  onSaveCategory,
 }: Props) {
   const from = startOfDay(new Date());
   const to = addDays(from, 400);
-  const byId = new Map(categories.map((c) => [c.id, c]));
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState<string>(CATEGORY_COLORS[0]);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState | null>(null);
 
-  const filtered = events.filter((event) => {
-    if (filter === "all") {
-      /* keep */
-    } else if (filter === "in" || filter === "out") {
-      if (event.flow !== filter) return false;
-    } else if (event.kind !== filter) {
-      return false;
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+
+  function matchesFilter(event: BudgetEvent) {
+    if (filter === "all") return true;
+    if (filter === "in" || filter === "out") return event.flow === filter;
+    return event.kind === filter;
+  }
+
+  function categoryCell(event: BudgetEvent) {
+    if (event.flow === "in") {
+      return { name: "Income", color: "#1f7a6e" };
     }
-    if (categoryFilter && event.categoryId !== categoryFilter) return false;
-    return true;
+    const category = event.categoryId ? categoryById.get(event.categoryId) : undefined;
+    return category
+      ? { name: category.name, color: category.color }
+      : { name: "Uncategorized", color: "#8b9a94" };
+  }
+
+  const rows = events
+    .filter(matchesFilter)
+    .map((event) => ({
+      event,
+      next: nextDate(event, from, to),
+      categoryName: categoryCell(event).name,
+      who: personLabel(event.person),
+      schedule: cadenceLabel(event.cadence, event.kind),
+      amount: event.flow === "in" ? event.amount : -event.amount,
+    }));
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const original = originalCompare(a, b);
+    if (!sort) return original;
+    const compared = compareColumn(a, b, sort.column);
+    const directed = sort.dir === "asc" ? compared : -compared;
+    return directed || original;
   });
 
+  function cycleSort(column: SortColumn) {
+    setSort((current) => {
+      if (!current || current.column !== column) return { column, dir: "asc" };
+      if (current.dir === "asc") return { column, dir: "desc" };
+      return null;
+    });
+  }
+
+  async function addCategory(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newCategoryName.trim();
+    if (!name) {
+      setCategoryError("Give the category a name.");
+      return;
+    }
+    if (categories.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
+      setCategoryError("That category already exists.");
+      return;
+    }
+    setCategoryError(null);
+    const position =
+      categories.reduce((max, category) => Math.max(max, category.position), -1) + 1;
+    await onSaveCategory({ name, color: newCategoryColor, position });
+    setNewCategoryName("");
+  }
+
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-rule bg-surface lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
-      <div className="flex flex-col gap-3 border-b border-rule px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-medium">Events</h2>
-            <p className="text-sm text-muted">Pay, budgets, and one-offs.</p>
-          </div>
-          <button type="button" className="btn-solid shrink-0" onClick={onAdd}>
-            Add
-          </button>
+    <section className="overflow-hidden rounded-xl border border-rule bg-surface">
+      <div className="flex flex-col gap-3 border-b border-rule px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div>
+          <h2 className="text-lg font-medium">Events</h2>
+          <p className="text-sm text-muted">
+            Income and expenses in one list, with category on each row.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <FilterPills value={filter} onChange={onFilter} />
-          {categories.length > 0 ? (
-            <select
-              value={categoryFilter}
-              onChange={(e) => onCategoryFilter(e.target.value)}
-              className="field w-full py-1 text-xs"
-              aria-label="Filter by category"
-            >
-              <option value="">All categories</option>
-              {[...categories]
-                .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
-                .map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-            </select>
-          ) : null}
+          <button type="button" className="btn-solid" onClick={onAdd}>
+            Add event
+          </button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
-          <p className="px-4 py-12 text-center text-sm text-muted">
-            {events.length === 0
-              ? "No events yet. Add salaries, rent, or a one-off like a vacation."
-              : "Nothing matches this filter."}
-          </p>
-        ) : (
-          <ul>
-            {filtered.map((event) => {
-              const next = nextDate(event, from, to);
-              const delta = event.flow === "in" ? event.amount : -event.amount;
-              const category =
-                event.flow === "out" && event.categoryId
-                  ? byId.get(event.categoryId)
-                  : undefined;
-              return (
-                <li key={event.id}>
-                  <button
-                    type="button"
-                    className="flex w-full items-start gap-3 border-b border-rule/70 px-4 py-3 text-left hover:bg-paper/70"
+      <form
+        onSubmit={(e) => void addCategory(e)}
+        className="flex flex-wrap items-center gap-2 border-b border-rule bg-paper/30 px-4 py-3 sm:px-5"
+      >
+        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
+          New category
+        </span>
+        <div className="flex gap-1">
+          {CATEGORY_COLORS.map((swatch) => (
+            <button
+              key={swatch}
+              type="button"
+              aria-label={swatch}
+              onClick={() => setNewCategoryColor(swatch)}
+              className={`h-4 w-4 rounded-full border ${
+                newCategoryColor === swatch ? "border-ink" : "border-transparent"
+              }`}
+              style={{ background: swatch }}
+            />
+          ))}
+        </div>
+        <input
+          value={newCategoryName}
+          onChange={(e) => setNewCategoryName(e.target.value)}
+          placeholder="Utilities, Home, Baby…"
+          className="field min-w-44 flex-1 py-1.5"
+        />
+        <button type="submit" className="btn-ghost py-1.5">
+          Add category
+        </button>
+        {categoryError ? (
+          <span className="w-full text-sm text-warn">{categoryError}</span>
+        ) : null}
+      </form>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-190 text-left text-sm">
+          <thead>
+            <tr className="text-[11px] uppercase tracking-[0.14em] text-muted">
+              <SortHeader
+                label="Event"
+                column="name"
+                sort={sort}
+                onCycle={cycleSort}
+                className="px-5 py-2"
+              />
+              <SortHeader
+                label="Category"
+                column="category"
+                sort={sort}
+                onCycle={cycleSort}
+                className="px-3 py-2"
+              />
+              <SortHeader
+                label="Who"
+                column="who"
+                sort={sort}
+                onCycle={cycleSort}
+                className="px-3 py-2"
+              />
+              <SortHeader
+                label="Schedule"
+                column="schedule"
+                sort={sort}
+                onCycle={cycleSort}
+                className="px-3 py-2"
+              />
+              <SortHeader
+                label="Next / date"
+                column="next"
+                sort={sort}
+                onCycle={cycleSort}
+                className="px-3 py-2"
+              />
+              <SortHeader
+                label="Amount"
+                column="amount"
+                sort={sort}
+                onCycle={cycleSort}
+                className="px-5 py-2"
+                align="right"
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-5 py-7 text-center text-sm text-muted">
+                  No matching events.
+                </td>
+              </tr>
+            ) : (
+              sortedRows.map(({ event, next }) => {
+                const delta = event.flow === "in" ? event.amount : -event.amount;
+                const category = categoryCell(event);
+                return (
+                  <tr
+                    key={event.id}
+                    className="cursor-pointer border-t border-rule/60 hover:bg-paper/70"
                     onClick={() => onEdit(event)}
                   >
-                    <span
-                      className={`mt-1 h-8 w-1 shrink-0 rounded-full ${
-                        event.flow === "in" ? "bg-teal" : "bg-copper"
-                      }`}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-baseline justify-between gap-2">
-                        <span className="truncate font-medium">{event.name}</span>
+                    <td className="px-5 py-3">
+                      <p className="font-medium">{event.name}</p>
+                      {event.notes ? (
+                        <p className="mt-0.5 max-w-md truncate text-xs text-muted">
+                          {event.notes}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="inline-flex items-center gap-2">
                         <span
-                          className={`shrink-0 font-mono text-[13px] font-medium ${
-                            event.flow === "in" ? "text-teal-deep" : "text-copper"
-                          }`}
-                        >
-                          {formatMoney(delta, currency, { sign: true })}
-                        </span>
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ background: category.color }}
+                        />
+                        {category.name}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-muted">
-                        {category ? `${category.name} · ` : ""}
-                        {cadenceLabel(event.cadence, event.kind)}
-                        {next ? ` · ${formatDate(next)}` : ""}
-                        {` · ${personLabel(event.person)}`}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                    </td>
+                    <td className="px-3 py-3 text-muted">{personLabel(event.person)}</td>
+                    <td className="px-3 py-3">{cadenceLabel(event.cadence, event.kind)}</td>
+                    <td className="px-3 py-3 font-mono text-xs text-muted">
+                      {next ? formatDate(next) : "—"}
+                    </td>
+                    <td
+                      className={`px-5 py-3 text-right font-mono text-sm font-medium ${
+                        event.flow === "in" ? "text-teal-deep" : "text-copper"
+                      }`}
+                    >
+                      {formatMoney(delta, currency, { sign: true })}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
-      <p className="border-t border-rule px-4 py-2 text-xs text-muted">
-        {forecast.occurrences.length} cash movements in this horizon
+      <p className="border-t border-rule px-5 py-2 text-xs text-muted">
+        {forecast.occurrences.length} cash movements across this forecast horizon
       </p>
     </section>
   );

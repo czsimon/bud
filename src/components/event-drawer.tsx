@@ -16,29 +16,36 @@ type Props = {
   open: boolean;
   event: BudgetEvent | null;
   categories: Category[];
+  initialCategoryId?: string | null;
+  initialFlow?: Flow;
   onClose: () => void;
   onSave: (draft: EventDraft) => Promise<void> | void;
   onCreateCategory: (name: string) => Promise<Category>;
   onDelete?: (id: string) => Promise<void> | void;
 };
 
-const emptyDraft = (): EventDraft => ({
+const emptyDraft = (
+  categoryId: string | null = null,
+  flow: Flow = "out",
+): EventDraft => ({
   name: "",
   amount: 0,
-  flow: "out",
+  flow,
   kind: "recurring",
   cadence: "monthly",
   startDate: new Date().toISOString().slice(0, 10),
   endDate: null,
   person: "shared",
   notes: "",
-  categoryId: null,
+  categoryId: flow === "out" ? categoryId : null,
 });
 
 export function EventDrawer({
   open,
   event,
   categories,
+  initialCategoryId,
+  initialFlow,
   onClose,
   onSave,
   onCreateCategory,
@@ -46,7 +53,9 @@ export function EventDrawer({
 }: Props) {
   const titleId = useId();
   const [draft, setDraft] = useState<EventDraft>(() =>
-    event ? { ...event } : emptyDraft(),
+    event
+      ? { ...event }
+      : emptyDraft(initialCategoryId ?? null, initialFlow ?? "out"),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
