@@ -156,7 +156,11 @@ select:disabled {
   stroke: var(--rule);
 }
 
-.chart-grid-month {
+.chart-month-line line {
+  stroke: var(--rule);
+}
+
+.chart-year-line line {
   stroke: var(--rule-strong);
 }
 

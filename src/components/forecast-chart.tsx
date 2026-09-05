@@ -75,6 +75,28 @@ function monthTicks(fromIso: string, toIso: string): number[] {
   return ticks;
 }
 
+function yearTicks(fromIso: string, toIso: string): number[] {
+  const ticks: number[] = [];
+  const end = timeOf(toIso);
+  let cursor = new Date(Number(fromIso.slice(0, 4)), 0, 1);
+  if (cursor.getTime() < timeOf(fromIso)) {
+    cursor = new Date(cursor.getFullYear() + 1, 0, 1);
+  }
+  while (cursor.getTime() <= end) {
+    ticks.push(cursor.getTime());
+    cursor = new Date(cursor.getFullYear() + 1, 0, 1);
+  }
+  return ticks;
+}
+
+function monthsBetween(fromIso: string, toIso: string): number {
+  const fromYear = Number(fromIso.slice(0, 4));
+  const fromMonth = Number(fromIso.slice(5, 7));
+  const toYear = Number(toIso.slice(0, 4));
+  const toMonth = Number(toIso.slice(5, 7));
+  return (toYear - fromYear) * 12 + (toMonth - fromMonth);
+}
+
 // Snap the axis to 10k boundaries and keep gridline labels on round numbers.
 function axisBounds(min: number, max: number) {
   const low = Math.floor(min / AXIS_UNIT) * AXIS_UNIT;
@@ -106,7 +128,24 @@ export function ForecastChart({ forecast, currency }: Props) {
     () => monthTicks(forecast.from, forecast.to),
     [forecast.from, forecast.to],
   );
-  const monthTickFormat = forecast.from.slice(0, 4) === forecast.to.slice(0, 4) ? "MMM" : "MMM yy";
+  const yearTickTimes = useMemo(
+    () => yearTicks(forecast.from, forecast.to),
+    [forecast.from, forecast.to],
+  );
+  // January already gets its own year line, so it is dropped from the month set.
+  const monthLineTimes = useMemo(
+    () => monthTickTimes.filter((time) => new Date(time).getMonth() !== 0),
+    [monthTickTimes],
+  );
+  // Past ~2 years a label on every month turns the axis into a smear, so the
+  // labels fall back to year boundaries while the month gridlines stay.
+  const labelByYear = monthsBetween(forecast.from, forecast.to) > 24;
+  const axisTicks = labelByYear ? yearTickTimes : monthTickTimes;
+  const axisTickFormat = labelByYear
+    ? "yyyy"
+    : forecast.from.slice(0, 4) === forecast.to.slice(0, 4)
+      ? "MMM"
+      : "MMM yy";
   const underZero = forecast.minBalance < 0;
   // The filled area runs from the highest balance down to the axis floor, while
   // the line only covers the balances themselves.
@@ -128,19 +167,25 @@ export function ForecastChart({ forecast, currency }: Props) {
             </linearGradient>
           </defs>
           <CartesianGrid className="chart-grid" strokeDasharray="0" vertical={false} />
-          <CartesianGrid
-            className="chart-grid-month"
-            strokeDasharray="4 4"
-            horizontal={false}
-          />
+          {monthLineTimes.map((time) => (
+            <ReferenceLine
+              key={`month-${time}`}
+              x={time}
+              className="chart-month-line"
+              strokeDasharray="4 4"
+            />
+          ))}
+          {yearTickTimes.map((time) => (
+            <ReferenceLine key={`year-${time}`} x={time} className="chart-year-line" />
+          ))}
           <XAxis
             dataKey="t"
             type="number"
             scale="time"
             domain={["dataMin", "dataMax"]}
-            ticks={monthTickTimes}
+            ticks={axisTicks}
             interval={0}
-            tickFormatter={(value) => format(new Date(value as number), monthTickFormat)}
+            tickFormatter={(value) => format(new Date(value as number), axisTickFormat)}
             tick={{ className: "chart-tick", fontSize: 12 }}
             axisLine={{ className: "chart-axis-line" }}
             tickLine={false}

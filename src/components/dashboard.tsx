@@ -23,6 +23,13 @@ import {
 
 type Section = "budget" | "events" | "categories";
 
+const HORIZON_OPTIONS = [
+  { months: 12, label: "1 year" },
+  { months: 24, label: "2 years" },
+  { months: 60, label: "5 years" },
+  { months: 120, label: "10 years" },
+] as const;
+
 type Props = {
   email: string | null;
 };
@@ -232,7 +239,9 @@ export function Dashboard({ email }: Props) {
             </p>
             <p className="mt-1 text-sm text-muted">
               from {formatMoney(forecast.startBalance, profile.currency)} today,
-              through the next {profile.horizonMonths} months
+              through the next{" "}
+              {HORIZON_OPTIONS.find((option) => option.months === profile.horizonMonths)
+                ?.label ?? `${profile.horizonMonths} months`}
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
@@ -256,45 +265,37 @@ export function Dashboard({ email }: Props) {
                 className="field w-40 font-mono"
               />
             </label>
-            <label className="block">
+            <div>
               <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
                 Horizon
               </span>
-              <select
-                value={profile.horizonMonths}
-                onChange={(e) =>
-                  void persistProfile({
-                    ...profile,
-                    horizonMonths: Number(e.target.value),
-                  })
-                }
-                className="field w-32"
-              >
-                <option value={6}>6 months</option>
-                <option value={12}>12 months</option>
-                <option value={24}>24 months</option>
-                <option value={36}>36 months</option>
-              </select>
-            </label>
+              <div className="flex flex-wrap gap-1 rounded-full border border-rule p-1">
+                {HORIZON_OPTIONS.map((option) => {
+                  const active = profile.horizonMonths === option.months;
+                  return (
+                    <button
+                      key={option.months}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() =>
+                        void persistProfile({
+                          ...profile,
+                          horizonMonths: option.months,
+                        })
+                      }
+                      className={`rounded-full px-2.5 py-1 text-xs ${
+                        active
+                          ? "bg-teal-deep text-on-accent"
+                          : "text-muted hover:text-ink"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-3 divide-x divide-rule border-b border-rule text-sm">
-          <Stat
-            label="Coming in"
-            value={formatMoney(forecast.totalIn, profile.currency, { sign: true })}
-            tone="in"
-          />
-          <Stat
-            label="Going out"
-            value={formatMoney(-forecast.totalOut, profile.currency, { sign: true })}
-            tone="out"
-          />
-          <Stat
-            label="Low point"
-            value={formatMoney(forecast.minBalance, profile.currency)}
-            tone={forecast.minBalance < 0 ? "out" : "neutral"}
-          />
         </div>
 
         <div className="w-full px-1 pb-1 pt-1 sm:px-3">
@@ -387,25 +388,6 @@ export function Dashboard({ email }: Props) {
           onDelete={handleDelete}
         />
       ) : null}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "in" | "out" | "neutral";
-}) {
-  const color =
-    tone === "in" ? "text-teal-deep" : tone === "out" ? "text-copper" : "text-ink";
-  return (
-    <div className="px-4 py-3 sm:px-6">
-      <p className="text-[11px] uppercase tracking-[0.16em] text-muted">{label}</p>
-      <p className={`mt-1 font-mono text-sm font-medium sm:text-base ${color}`}>{value}</p>
     </div>
   );
 }
