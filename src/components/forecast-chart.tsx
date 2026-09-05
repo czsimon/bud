@@ -114,7 +114,7 @@ export function ForecastChart({ forecast, currency }: Props) {
   const strokeSplit = zeroSplit(forecast.maxBalance, forecast.minBalance);
 
   return (
-    <div className="h-[280px] w-full sm:h-[320px]">
+    <div className="h-[220px] w-full sm:h-[260px]">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
           <defs>

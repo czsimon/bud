@@ -3,6 +3,7 @@
 import { addMonths, startOfDay } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CategoryList } from "@/components/category-list";
 import { EventDrawer } from "@/components/event-drawer";
 import { EventTable } from "@/components/event-table";
 import { ForecastChart } from "@/components/forecast-chart";
@@ -15,10 +16,11 @@ import {
   type Category,
   type CategoryDraft,
   type EventDraft,
+  type EventKind,
   type Profile,
 } from "@/lib/types";
 
-type Filter = "all" | "in" | "out" | "recurring" | "one_off";
+type Section = "budget" | "events" | "categories";
 
 type Props = {
   email: string | null;
@@ -31,9 +33,10 @@ export function Dashboard({ email }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [section, setSection] = useState<Section>("budget");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetEvent | null>(null);
+  const [drawerKind, setDrawerKind] = useState<EventKind>("recurring");
   const [balanceDraft, setBalanceDraft] = useState("");
 
   useEffect(() => {
@@ -69,6 +72,15 @@ export function Dashboard({ email }: Props) {
     const to = addMonths(from, profile.horizonMonths);
     return buildForecast(events, profile.startingBalance, from, to);
   }, [events, profile]);
+
+  const budgetEvents = useMemo(
+    () => events.filter((event) => event.kind === "recurring"),
+    [events],
+  );
+  const oneOffEvents = useMemo(
+    () => events.filter((event) => event.kind === "one_off"),
+    [events],
+  );
 
   async function persistProfile(next: Profile) {
     const previous = profile;
@@ -116,6 +128,20 @@ export function Dashboard({ email }: Props) {
     }
   }
 
+  async function handleDeleteCategory(id: string) {
+    try {
+      await remote.deleteCategory(id);
+      setCategories((prev) => prev.filter((category) => category.id !== id));
+      setEvents((prev) =>
+        prev.map((event) =>
+          event.categoryId === id ? { ...event, categoryId: null } : event,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete that category.");
+    }
+  }
+
   async function handleCreateCategory(name: string): Promise<Category> {
     const trimmed = name.trim();
     const existing = categories.find(
@@ -128,6 +154,18 @@ export function Dashboard({ email }: Props) {
     return persistCategory({ name: trimmed, color, position: nextPosition });
   }
 
+  function openNew(kind: EventKind) {
+    setEditing(null);
+    setDrawerKind(kind);
+    setDrawerOpen(true);
+  }
+
+  function openEdit(event: BudgetEvent) {
+    setEditing(event);
+    setDrawerKind(event.kind);
+    setDrawerOpen(true);
+  }
+
   async function handleSignOut() {
     await remote.signOut();
     router.replace("/login");
@@ -136,9 +174,7 @@ export function Dashboard({ email }: Props) {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-6xl px-4 py-16 text-muted">
-        Loading your forecast…
-      </main>
+      <main className="px-4 py-16 text-muted">Loading your forecast…</main>
     );
   }
 
@@ -159,9 +195,9 @@ export function Dashboard({ email }: Props) {
         : "text-ink";
 
   return (
-    <div className="min-h-full">
-      <header className="border-b border-rule/80 bg-surface/80 backdrop-blur">
-        <div className="mx-auto flex max-w-none items-center justify-between gap-4 px-4 py-3 sm:px-6">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+      <header className="shrink-0 border-b border-rule/80 bg-surface">
+        <div className="flex items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-baseline gap-3">
             <p className="text-lg font-semibold tracking-tight">Bud</p>
             <p className="hidden text-sm text-muted sm:block">
@@ -177,118 +213,172 @@ export function Dashboard({ email }: Props) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6 sm:py-8">
-        {error ? (
-          <p className="rounded-md border border-copper/40 bg-surface px-3 py-2 text-sm text-warn">
-            {error}
-          </p>
-        ) : null}
+      {error ? (
+        <p className="shrink-0 border-b border-copper/40 bg-surface px-4 py-2 text-sm text-warn sm:px-6">
+          {error}
+        </p>
+      ) : null}
 
-        <section className="overflow-hidden rounded-xl border border-rule bg-surface">
-          <div className="flex flex-col gap-4 border-b border-rule px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted">
-                Projected cash
-              </p>
-              <p className={`mt-1 font-mono text-4xl font-medium tracking-tight ${endTone}`}>
-                {formatMoney(forecast.endBalance, profile.currency)}
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                from {formatMoney(forecast.startBalance, profile.currency)} today,
-                through the next {profile.horizonMonths} months
-              </p>
-            </div>
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="block">
-                <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
-                  Cash on hand today
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={balanceDraft}
-                  onChange={(e) => setBalanceDraft(e.target.value)}
-                  onBlur={() => {
-                    const value = Number(balanceDraft);
-                    if (Number.isFinite(value)) {
-                      void persistProfile({ ...profile, startingBalance: value });
-                    } else {
-                      setBalanceDraft(String(profile.startingBalance));
-                    }
-                  }}
-                  className="field w-40 font-mono"
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
-                  Horizon
-                </span>
-                <select
-                  value={profile.horizonMonths}
-                  onChange={(e) =>
-                    void persistProfile({
-                      ...profile,
-                      horizonMonths: Number(e.target.value),
-                    })
+      <section className="shrink-0 border-b border-rule bg-surface">
+        <div className="flex flex-col gap-4 border-b border-rule px-4 py-3 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted">
+              Projected cash
+            </p>
+            <p className={`mt-1 font-mono text-3xl font-medium tracking-tight sm:text-4xl ${endTone}`}>
+              {formatMoney(forecast.endBalance, profile.currency)}
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              from {formatMoney(forecast.startBalance, profile.currency)} today,
+              through the next {profile.horizonMonths} months
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block">
+              <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
+                Cash on hand today
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                value={balanceDraft}
+                onChange={(e) => setBalanceDraft(e.target.value)}
+                onBlur={() => {
+                  const value = Number(balanceDraft);
+                  if (Number.isFinite(value)) {
+                    void persistProfile({ ...profile, startingBalance: value });
+                  } else {
+                    setBalanceDraft(String(profile.startingBalance));
                   }
-                  className="field w-32"
-                >
-                  <option value={6}>6 months</option>
-                  <option value={12}>12 months</option>
-                  <option value={24}>24 months</option>
-                  <option value={36}>36 months</option>
-                </select>
-              </label>
-            </div>
+                }}
+                className="field w-40 font-mono"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
+                Horizon
+              </span>
+              <select
+                value={profile.horizonMonths}
+                onChange={(e) =>
+                  void persistProfile({
+                    ...profile,
+                    horizonMonths: Number(e.target.value),
+                  })
+                }
+                className="field w-32"
+              >
+                <option value={6}>6 months</option>
+                <option value={12}>12 months</option>
+                <option value={24}>24 months</option>
+                <option value={36}>36 months</option>
+              </select>
+            </label>
           </div>
+        </div>
 
-          <div className="grid grid-cols-3 divide-x divide-rule border-b border-rule text-sm">
-            <Stat
-              label="Coming in"
-              value={formatMoney(forecast.totalIn, profile.currency, { sign: true })}
-              tone="in"
-            />
-            <Stat
-              label="Going out"
-              value={formatMoney(-forecast.totalOut, profile.currency, { sign: true })}
-              tone="out"
-            />
-            <Stat
-              label="Low point"
-              value={formatMoney(forecast.minBalance, profile.currency)}
-              tone={forecast.minBalance < 0 ? "out" : "neutral"}
-            />
-          </div>
+        <div className="grid grid-cols-3 divide-x divide-rule border-b border-rule text-sm">
+          <Stat
+            label="Coming in"
+            value={formatMoney(forecast.totalIn, profile.currency, { sign: true })}
+            tone="in"
+          />
+          <Stat
+            label="Going out"
+            value={formatMoney(-forecast.totalOut, profile.currency, { sign: true })}
+            tone="out"
+          />
+          <Stat
+            label="Low point"
+            value={formatMoney(forecast.minBalance, profile.currency)}
+            tone={forecast.minBalance < 0 ? "out" : "neutral"}
+          />
+        </div>
 
-          <div className="px-2 pb-2 pt-1 sm:px-3">
-            <ForecastChart forecast={forecast} currency={profile.currency} />
-          </div>
-        </section>
+        <div className="w-full px-1 pb-1 pt-1 sm:px-3">
+          <ForecastChart forecast={forecast} currency={profile.currency} />
+        </div>
+      </section>
 
-        <EventTable
-          events={events}
-          categories={categories}
-          forecast={forecast}
-          currency={profile.currency}
-          filter={filter}
-          onFilter={setFilter}
-          onAdd={() => {
-            setEditing(null);
-            setDrawerOpen(true);
-          }}
-          onEdit={(event) => {
-            setEditing(event);
-            setDrawerOpen(true);
-          }}
-          onSaveCategory={handleSaveCategory}
-        />
-      </main>
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <nav
+          aria-label="Ledger"
+          className="flex shrink-0 gap-1 overflow-x-auto border-b border-rule bg-paper px-2 py-2 sm:w-52 sm:flex-col sm:gap-0.5 sm:overflow-visible sm:border-b-0 sm:border-r sm:px-3 sm:py-4"
+        >
+          {(
+            [
+              { id: "budget", label: "Budget" },
+              { id: "events", label: "Events" },
+              { id: "categories", label: "Categories" },
+            ] as const
+          ).map((item) => {
+            const active = section === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={active ? "page" : undefined}
+                onClick={() => setSection(item.id)}
+                className={`rounded-md px-3 py-2 text-left text-sm whitespace-nowrap ${
+                  active
+                    ? "bg-surface font-medium text-ink shadow-sm ring-1 ring-rule"
+                    : "text-muted hover:bg-surface/70 hover:text-ink"
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
+          {section === "budget" ? (
+            <EventTable
+              title="Budget"
+              description="Recurring income and expenses. Edits move the forecast immediately."
+              addLabel="Add line"
+              emptyLabel="No budget lines yet. Add a salary, rent, or monthly expense."
+              events={budgetEvents}
+              categories={categories}
+              forecast={forecast}
+              currency={profile.currency}
+              onAdd={() => openNew("recurring")}
+              onEdit={openEdit}
+            />
+          ) : null}
+          {section === "events" ? (
+            <EventTable
+              title="Events"
+              description="One-off hits and windfalls on specific dates."
+              addLabel="Add event"
+              emptyLabel="No one-off events yet."
+              events={oneOffEvents}
+              categories={categories}
+              forecast={forecast}
+              currency={profile.currency}
+              onAdd={() => openNew("one_off")}
+              onEdit={openEdit}
+            />
+          ) : null}
+          {section === "categories" ? (
+            <CategoryList
+              categories={categories}
+              events={events}
+              currency={profile.currency}
+              onSave={handleSaveCategory}
+              onDelete={handleDeleteCategory}
+            />
+          ) : null}
+        </div>
+      </div>
 
       {drawerOpen ? (
         <EventDrawer
+          key={editing?.id ?? `new-${drawerKind}`}
           open
           event={editing}
           categories={categories}
+          initialKind={drawerKind}
           onClose={() => setDrawerOpen(false)}
           onSave={handleSave}
           onCreateCategory={handleCreateCategory}
@@ -311,7 +401,7 @@ function Stat({
   const color =
     tone === "in" ? "text-teal-deep" : tone === "out" ? "text-copper" : "text-ink";
   return (
-    <div className="px-4 py-3 sm:px-5">
+    <div className="px-4 py-3 sm:px-6">
       <p className="text-[11px] uppercase tracking-[0.16em] text-muted">{label}</p>
       <p className={`mt-1 font-mono text-sm font-medium sm:text-base ${color}`}>{value}</p>
     </div>

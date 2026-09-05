@@ -4,18 +4,16 @@ import { addDays, formatISO, startOfDay } from "date-fns";
 import { useState } from "react";
 import { eventOccurrences } from "@/lib/forecast";
 import {
-  CATEGORY_COLORS,
   cadenceLabel,
   formatDate,
   formatMoney,
   personLabel,
   type BudgetEvent,
   type Category,
-  type CategoryDraft,
   type Forecast,
 } from "@/lib/types";
 
-type Filter = "all" | "in" | "out" | "recurring" | "one_off";
+type Filter = "all" | "in" | "out";
 type SortColumn = "name" | "category" | "who" | "schedule" | "next" | "amount";
 type SortDir = "asc" | "desc";
 type SortState = { column: SortColumn; dir: SortDir };
@@ -30,15 +28,16 @@ type Row = {
 };
 
 type Props = {
+  title: string;
+  description: string;
+  addLabel: string;
+  emptyLabel: string;
   events: BudgetEvent[];
   categories: Category[];
   forecast: Forecast;
   currency: string;
-  filter: Filter;
-  onFilter: (filter: Filter) => void;
   onAdd: () => void;
   onEdit: (event: BudgetEvent) => void;
-  onSaveCategory: (draft: CategoryDraft) => Promise<void> | void;
 };
 
 function nextDate(event: BudgetEvent, from: Date, to: Date): string | null {
@@ -118,29 +117,27 @@ function SortHeader({
 }
 
 export function EventTable({
+  title,
+  description,
+  addLabel,
+  emptyLabel,
   events,
   categories,
   forecast,
   currency,
-  filter,
-  onFilter,
   onAdd,
   onEdit,
-  onSaveCategory,
 }: Props) {
   const from = startOfDay(new Date());
   const to = addDays(from, 400);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryColor, setNewCategoryColor] = useState<string>(CATEGORY_COLORS[0]);
-  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<SortState | null>(null);
 
   const categoryById = new Map(categories.map((category) => [category.id, category]));
 
   function matchesFilter(event: BudgetEvent) {
     if (filter === "all") return true;
-    if (filter === "in" || filter === "out") return event.flow === filter;
-    return event.kind === filter;
+    return event.flow === filter;
   }
 
   function categoryCell(event: BudgetEvent) {
@@ -180,77 +177,22 @@ export function EventTable({
     });
   }
 
-  async function addCategory(e: React.FormEvent) {
-    e.preventDefault();
-    const name = newCategoryName.trim();
-    if (!name) {
-      setCategoryError("Give the category a name.");
-      return;
-    }
-    if (categories.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
-      setCategoryError("That category already exists.");
-      return;
-    }
-    setCategoryError(null);
-    const position =
-      categories.reduce((max, category) => Math.max(max, category.position), -1) + 1;
-    await onSaveCategory({ name, color: newCategoryColor, position });
-    setNewCategoryName("");
-  }
-
   return (
-    <section className="overflow-hidden rounded-xl border border-rule bg-surface">
+    <section className="flex min-h-0 flex-1 flex-col bg-surface">
       <div className="flex flex-col gap-3 border-b border-rule px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
-          <h2 className="text-lg font-medium">Events</h2>
-          <p className="text-sm text-muted">
-            Income and expenses in one list, with category on each row.
-          </p>
+          <h2 className="text-lg font-medium">{title}</h2>
+          <p className="text-sm text-muted">{description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <FilterPills value={filter} onChange={onFilter} />
+          <FilterPills value={filter} onChange={setFilter} />
           <button type="button" className="btn-solid" onClick={onAdd}>
-            Add event
+            {addLabel}
           </button>
         </div>
       </div>
 
-      <form
-        onSubmit={(e) => void addCategory(e)}
-        className="flex flex-wrap items-center gap-2 border-b border-rule bg-paper/30 px-4 py-3 sm:px-5"
-      >
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
-          New category
-        </span>
-        <div className="flex gap-1">
-          {CATEGORY_COLORS.map((swatch) => (
-            <button
-              key={swatch}
-              type="button"
-              aria-label={swatch}
-              onClick={() => setNewCategoryColor(swatch)}
-              className={`h-4 w-4 rounded-full border ${
-                newCategoryColor === swatch ? "border-ink" : "border-transparent"
-              }`}
-              style={{ background: swatch }}
-            />
-          ))}
-        </div>
-        <input
-          value={newCategoryName}
-          onChange={(e) => setNewCategoryName(e.target.value)}
-          placeholder="Utilities, Home, Baby…"
-          className="field min-w-44 flex-1 py-1.5"
-        />
-        <button type="submit" className="btn-ghost py-1.5">
-          Add category
-        </button>
-        {categoryError ? (
-          <span className="w-full text-sm text-warn">{categoryError}</span>
-        ) : null}
-      </form>
-
-      <div className="overflow-x-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-190 text-left text-sm">
           <thead>
             <tr className="text-[11px] uppercase tracking-[0.14em] text-muted">
@@ -303,7 +245,7 @@ export function EventTable({
             {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-5 py-7 text-center text-sm text-muted">
-                  No matching events.
+                  {emptyLabel}
                 </td>
               </tr>
             ) : (
@@ -370,8 +312,6 @@ function FilterPills({
     { id: "all", label: "All" },
     { id: "in", label: "Income" },
     { id: "out", label: "Expenses" },
-    { id: "recurring", label: "Repeating" },
-    { id: "one_off", label: "One-off" },
   ];
   return (
     <div className="flex flex-wrap gap-1 rounded-full border border-rule p-1">

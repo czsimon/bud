@@ -130,3 +130,25 @@ export function personLabel(person: string | null): string {
   if (person === "shared") return "Shared";
   return person;
 }
+
+/** Approximate monthly cash effect of a recurring event. One-offs are 0. */
+export function monthlyEquivalent(event: BudgetEvent): number {
+  const signed = event.flow === "in" ? event.amount : -event.amount;
+  if (event.kind === "one_off") return 0;
+  switch (event.cadence) {
+    case "weekly":
+      return signed * (52 / 12);
+    case "biweekly":
+      return signed * (26 / 12);
+    case "semimonthly":
+      return signed * 2;
+    case "monthly":
+      return signed;
+    case "quarterly":
+      return signed / 3;
+    case "yearly":
+      return signed / 12;
+    default:
+      return signed;
+  }
+}
