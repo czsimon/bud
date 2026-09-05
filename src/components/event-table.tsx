@@ -142,12 +142,12 @@ export function EventTable({
 
   function categoryCell(event: BudgetEvent) {
     if (event.flow === "in") {
-      return { name: "Income", color: "#1f7a6e" };
+      return { name: "Income", color: "var(--teal)" };
     }
     const category = event.categoryId ? categoryById.get(event.categoryId) : undefined;
     return category
       ? { name: category.name, color: category.color }
-      : { name: "Uncategorized", color: "#8b9a94" };
+      : { name: "Uncategorized", color: "var(--muted)" };
   }
 
   const rows = events
@@ -321,7 +321,9 @@ function FilterPills({
           type="button"
           onClick={() => onChange(pill.id)}
           className={`rounded-full px-2.5 py-1 text-xs ${
-            value === pill.id ? "bg-teal-deep text-surface" : "text-muted hover:text-ink"
+            value === pill.id
+              ? "bg-teal-deep text-on-accent"
+              : "text-muted hover:text-ink"
           }`}
         >
           {pill.label}

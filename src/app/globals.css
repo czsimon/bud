@@ -1,16 +1,35 @@
 @import "tailwindcss";
 
+/* Every color in the app comes from these tokens. `light-dark()` picks an arm
+   based on the used `color-scheme`, so the two rules below repaint the whole
+   app — no component ever needs a per-theme class. `data-theme="auto"` simply
+   leaves the inherited `light dark` in place and follows the OS. */
 :root {
-  --paper: #e4ece8;
-  --surface: #f7faf8;
-  --ink: #142824;
-  --muted: #5c7069;
-  --teal: #1f7a6e;
-  --teal-deep: #0f4f47;
-  --mint: #b7dcd4;
-  --copper: #c0562a;
-  --rule: #c5d4cd;
-  --warn: #8f3a2c;
+  color-scheme: light dark;
+
+  --paper: light-dark(#e4ece8, #0c1513);
+  --surface: light-dark(#f7faf8, #141f1c);
+  --ink: light-dark(#142824, #e3ece9);
+  --muted: light-dark(#5c7069, #90a49d);
+  --teal: light-dark(#1f7a6e, #3f9e8f);
+  --teal-deep: light-dark(#0f4f47, #74cdbb);
+  --mint: light-dark(#b7dcd4, #1b4a41);
+  --copper: light-dark(#c0562a, #e08a63);
+  --rule: light-dark(#c5d4cd, #2a3a35);
+  --rule-strong: light-dark(#9aa8a2, #354943);
+  --warn: light-dark(#8f3a2c, #f0907a);
+  --danger: light-dark(#dc2626, #ff7a6b);
+  /* Text/icons that sit on top of a --teal-deep fill. */
+  --on-accent: light-dark(#f4faf8, #06211d);
+  --scrim: light-dark(rgb(20 40 36 / 0.25), rgb(0 0 0 / 0.6));
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -24,6 +43,9 @@
   --color-copper: var(--copper);
   --color-rule: var(--rule);
   --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-on-accent: var(--on-accent);
+  --color-scrim: var(--scrim);
   --font-sans: var(--font-outfit);
   --font-mono: var(--font-ibm);
 }
@@ -40,7 +62,7 @@ body {
 
 ::selection {
   background: var(--mint);
-  color: var(--teal-deep);
+  color: var(--ink);
 }
 
 input,
@@ -82,7 +104,7 @@ select:disabled {
 .btn-solid {
   border-radius: 999px;
   background: var(--teal-deep);
-  color: #f4faf8;
+  color: var(--on-accent);
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   font-weight: 500;
@@ -106,6 +128,78 @@ select:disabled {
 
 .btn-ghost:hover {
   background: var(--paper);
+}
+
+/* The selected segment is keyed off <html data-theme> rather than React state
+   so the inline head script settles it before first paint. */
+.theme-option {
+  border-radius: 999px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.theme-option:hover {
+  color: var(--ink);
+}
+
+:root[data-theme="auto"] .theme-option[data-theme-value="auto"],
+:root[data-theme="light"] .theme-option[data-theme-value="light"],
+:root[data-theme="dark"] .theme-option[data-theme-value="dark"] {
+  background: var(--teal-deep);
+  color: var(--on-accent);
+}
+
+/* Recharts 3 puts the className we pass onto the painted node itself
+   (the <line>, <text>, or <g>), so these rules target that node. */
+.chart-grid {
+  stroke: var(--rule);
+}
+
+.chart-grid-month {
+  stroke: var(--rule-strong);
+}
+
+.chart-tick {
+  fill: var(--muted);
+}
+
+.chart-tick-mono {
+  font-family: var(--font-ibm), ui-monospace, monospace;
+}
+
+.chart-axis-line {
+  stroke: var(--rule);
+}
+
+.chart-cursor {
+  stroke: var(--teal-deep);
+}
+
+.chart-cursor-negative {
+  stroke: var(--danger);
+}
+
+.chart-zero-line line {
+  stroke: var(--danger);
+}
+
+.chart-fill-positive {
+  stop-color: var(--teal);
+  stop-opacity: 0.32;
+}
+
+.chart-fill-negative {
+  stop-color: var(--danger);
+  stop-opacity: 0.38;
+}
+
+.chart-stroke-positive {
+  stop-color: var(--teal-deep);
+}
+
+.chart-stroke-negative {
+  stop-color: var(--danger);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -37,7 +37,7 @@ function ChartTooltip({
       </p>
       <p
         className={`mt-1 font-mono text-sm font-medium ${
-          point.balance < 0 ? "text-red-600" : ""
+          point.balance < 0 ? "text-danger" : ""
         }`}
       >
         {formatMoney(point.balance, currency)}
@@ -119,17 +119,17 @@ export function ForecastChart({ forecast, currency }: Props) {
         <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="cashFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset={fillSplit} stopColor="#1f7a6e" stopOpacity={0.32} />
-              <stop offset={fillSplit} stopColor="#dc2626" stopOpacity={0.38} />
+              <stop offset={fillSplit} className="chart-fill-positive" />
+              <stop offset={fillSplit} className="chart-fill-negative" />
             </linearGradient>
             <linearGradient id="cashStroke" x1="0" y1="0" x2="0" y2="1">
-              <stop offset={strokeSplit} stopColor="#0f4f47" />
-              <stop offset={strokeSplit} stopColor="#dc2626" />
+              <stop offset={strokeSplit} className="chart-stroke-positive" />
+              <stop offset={strokeSplit} className="chart-stroke-negative" />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="#c5d4cd" strokeDasharray="0" vertical={false} />
+          <CartesianGrid className="chart-grid" strokeDasharray="0" vertical={false} />
           <CartesianGrid
-            stroke="#9aa8a2"
+            className="chart-grid-month"
             strokeDasharray="4 4"
             horizontal={false}
           />
@@ -141,8 +141,8 @@ export function ForecastChart({ forecast, currency }: Props) {
             ticks={monthTickTimes}
             interval={0}
             tickFormatter={(value) => format(new Date(value as number), monthTickFormat)}
-            tick={{ fill: "#5c7069", fontSize: 12 }}
-            axisLine={{ stroke: "#c5d4cd" }}
+            tick={{ className: "chart-tick", fontSize: 12 }}
+            axisLine={{ className: "chart-axis-line" }}
             tickLine={false}
           />
           <YAxis
@@ -154,17 +154,20 @@ export function ForecastChart({ forecast, currency }: Props) {
                 maximumFractionDigits: 1,
               }).format(value as number)
             }
-            tick={{ fill: "#5c7069", fontSize: 12, fontFamily: "IBM Plex Mono, monospace" }}
+            tick={{ className: "chart-tick chart-tick-mono", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
             width={48}
           />
           <Tooltip
             content={<ChartTooltip currency={currency} />}
-            cursor={{ stroke: underZero ? "#dc2626" : "#0f4f47", strokeWidth: 1 }}
+            cursor={{
+              className: underZero ? "chart-cursor-negative" : "chart-cursor",
+              strokeWidth: 1,
+            }}
           />
           {underZero ? (
-            <ReferenceLine y={0} stroke="#dc2626" strokeDasharray="4 4" />
+            <ReferenceLine y={0} className="chart-zero-line" strokeDasharray="4 4" />
           ) : null}
           <Area
             type="stepAfter"

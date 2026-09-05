@@ -7,6 +7,7 @@ import { CategoryList } from "@/components/category-list";
 import { EventDrawer } from "@/components/event-drawer";
 import { EventTable } from "@/components/event-table";
 import { ForecastChart } from "@/components/forecast-chart";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { buildForecast } from "@/lib/forecast";
 import * as remote from "@/lib/supabase/data";
 import {
@@ -205,7 +206,8 @@ export function Dashboard({ email }: Props) {
             </p>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <span className="max-w-45 truncate text-muted">{email}</span>
+            <ThemeToggle />
+            <span className="hidden max-w-45 truncate text-muted sm:block">{email}</span>
             <button type="button" className="btn-ghost py-1.5" onClick={handleSignOut}>
               Sign out
             </button>

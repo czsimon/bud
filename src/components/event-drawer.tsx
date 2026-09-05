@@ -119,7 +119,7 @@ export function EventDrawer({
       <button
         type="button"
         aria-label="Close panel"
-        className="absolute inset-0 bg-ink/25"
+        className="absolute inset-0 bg-scrim"
         onClick={onClose}
       />
       <aside
