@@ -2,6 +2,16 @@
 
 import { useMemo, useState } from "react";
 import {
+  DataTable,
+  DataTableBody,
+  DataTableCell,
+  DataTableEmptyRow,
+  DataTableHead,
+  DataTableHeader,
+  DataTableRow,
+  DataTableViewport,
+} from "@/components/data-table";
+import {
   CATEGORY_COLORS,
   formatMoney,
   monthlyEquivalent,
@@ -129,31 +139,29 @@ export function CategoryList({
         </p>
       ) : null}
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-[0.14em] text-muted">
-              <th className="px-5 py-2 font-medium">Category</th>
-              <th className="px-3 py-2 font-medium">Lines</th>
-              <th className="px-5 py-2 text-right font-medium">Monthly</th>
-              <th className="w-24 px-5 py-2 font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+      <DataTableViewport>
+        <DataTable>
+          <DataTableHeader>
+            <DataTableHead pad="edge">Category</DataTableHead>
+            <DataTableHead>Lines</DataTableHead>
+            <DataTableHead pad="edge" className="text-right">
+              Monthly
+            </DataTableHead>
+            <DataTableHead pad="edge" className="w-24">
+              <span className="sr-only">Actions</span>
+            </DataTableHead>
+          </DataTableHeader>
+          <DataTableBody>
             {rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-5 py-7 text-center text-sm text-muted">
-                  No categories yet. Add one to start grouping expenses.
-                </td>
-              </tr>
+              <DataTableEmptyRow colSpan={4}>
+                No categories yet. Add one to start grouping expenses.
+              </DataTableEmptyRow>
             ) : (
               rows.map(({ category, count, monthly }) => {
                 const editing = editingId === category.id;
                 return (
-                  <tr key={category.id} className="border-t border-rule/60">
-                    <td className="px-5 py-3">
+                  <DataTableRow key={category.id}>
+                    <DataTableCell pad="edge">
                       {editing ? (
                         <div className="flex flex-wrap items-center gap-2">
                           <ColorSwatches value={editColor} onChange={setEditColor} />
@@ -184,10 +192,13 @@ export function CategoryList({
                           {category.name}
                         </button>
                       )}
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs text-muted">{count}</td>
-                    <td
-                      className={`px-5 py-3 text-right font-mono text-sm font-medium ${
+                    </DataTableCell>
+                    <DataTableCell className="font-mono text-xs text-muted">
+                      {count}
+                    </DataTableCell>
+                    <DataTableCell
+                      pad="edge"
+                      className={`text-right font-mono text-sm font-medium ${
                         monthly < 0
                           ? "text-copper"
                           : monthly > 0
@@ -196,8 +207,8 @@ export function CategoryList({
                       }`}
                     >
                       {formatMoney(monthly, currency, { sign: monthly !== 0 })}
-                    </td>
-                    <td className="px-5 py-3 text-right">
+                    </DataTableCell>
+                    <DataTableCell pad="edge" className="text-right">
                       {editing ? (
                         <div className="flex justify-end gap-2">
                           <button
@@ -233,14 +244,14 @@ export function CategoryList({
                           Delete
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </DataTableCell>
+                  </DataTableRow>
                 );
               })
             )}
-          </tbody>
-        </table>
-      </div>
+          </DataTableBody>
+        </DataTable>
+      </DataTableViewport>
     </section>
   );
 }

@@ -61,7 +61,9 @@ export function Dashboard({ email }: Props) {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Could not load your ledger.");
+        setError(
+          err instanceof Error ? err.message : "Could not load your ledger.",
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -106,7 +108,9 @@ export function Dashboard({ email }: Props) {
     const saved = await remote.upsertEvent(draft, profile.id);
     setEvents((prev) => {
       const exists = prev.some((e) => e.id === saved.id);
-      return exists ? prev.map((e) => (e.id === saved.id ? saved : e)) : [...prev, saved];
+      return exists
+        ? prev.map((e) => (e.id === saved.id ? saved : e))
+        : [...prev, saved];
     });
   }
 
@@ -131,7 +135,9 @@ export function Dashboard({ email }: Props) {
     try {
       await persistCategory(draft);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save that category.");
+      setError(
+        err instanceof Error ? err.message : "Could not save that category.",
+      );
       throw err;
     }
   }
@@ -146,7 +152,9 @@ export function Dashboard({ email }: Props) {
         ),
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete that category.");
+      setError(
+        err instanceof Error ? err.message : "Could not delete that category.",
+      );
     }
   }
 
@@ -156,9 +164,11 @@ export function Dashboard({ email }: Props) {
       (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
     );
     if (existing) return existing;
-    const nextPosition = categories.reduce((max, c) => Math.max(max, c.position), -1) + 1;
+    const nextPosition =
+      categories.reduce((max, c) => Math.max(max, c.position), -1) + 1;
     const color =
-      CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length] ?? CATEGORY_COLORS[0];
+      CATEGORY_COLORS[categories.length % CATEGORY_COLORS.length] ??
+      CATEGORY_COLORS[0];
     return persistCategory({ name: trimmed, color, position: nextPosition });
   }
 
@@ -182,7 +192,9 @@ export function Dashboard({ email }: Props) {
 
   if (loading) {
     return (
-      <main className="px-4 py-16 text-muted">Loading your forecast…</main>
+      <main className="flex h-dvh w-full items-center justify-center text-muted">
+        Loading your forecast…
+      </main>
     );
   }
 
@@ -214,8 +226,14 @@ export function Dashboard({ email }: Props) {
           </div>
           <div className="flex items-center gap-3 text-sm">
             <ThemeToggle />
-            <span className="hidden max-w-45 truncate text-muted sm:block">{email}</span>
-            <button type="button" className="btn-ghost py-1.5" onClick={handleSignOut}>
+            <span className="hidden max-w-45 truncate text-muted sm:block">
+              {email}
+            </span>
+            <button
+              type="button"
+              className="btn-ghost py-1.5"
+              onClick={handleSignOut}
+            >
               Sign out
             </button>
           </div>
@@ -234,14 +252,17 @@ export function Dashboard({ email }: Props) {
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted">
               Projected cash
             </p>
-            <p className={`mt-1 font-mono text-3xl font-medium tracking-tight sm:text-4xl ${endTone}`}>
+            <p
+              className={`mt-1 font-mono text-3xl font-medium tracking-tight sm:text-4xl ${endTone}`}
+            >
               {formatMoney(forecast.endBalance, profile.currency)}
             </p>
             <p className="mt-1 text-sm text-muted">
               from {formatMoney(forecast.startBalance, profile.currency)} today,
               through the next{" "}
-              {HORIZON_OPTIONS.find((option) => option.months === profile.horizonMonths)
-                ?.label ?? `${profile.horizonMonths} months`}
+              {HORIZON_OPTIONS.find(
+                (option) => option.months === profile.horizonMonths,
+              )?.label ?? `${profile.horizonMonths} months`}
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">

@@ -2,6 +2,16 @@
 
 import { addDays, formatISO, startOfDay } from "date-fns";
 import { useState } from "react";
+import {
+  DataTable,
+  DataTableBody,
+  DataTableCell,
+  DataTableEmptyRow,
+  DataTableHead,
+  DataTableHeader,
+  DataTableRow,
+  DataTableViewport,
+} from "@/components/data-table";
 import { eventOccurrences } from "@/lib/forecast";
 import {
   cadenceLabel,
@@ -81,14 +91,14 @@ function SortHeader({
   column,
   sort,
   onCycle,
-  className,
+  pad,
   align = "left",
 }: {
   label: string;
   column: SortColumn;
   sort: SortState | null;
   onCycle: (column: SortColumn) => void;
-  className: string;
+  pad?: "cell" | "edge";
   align?: "left" | "right";
 }) {
   const active = sort?.column === column;
@@ -98,7 +108,7 @@ function SortHeader({
     dir === "asc" ? "descending" : dir === "desc" ? "original order" : "ascending";
 
   return (
-    <th aria-sort={ariaSort} className={`${className} font-medium`}>
+    <DataTableHead aria-sort={ariaSort} pad={pad}>
       <button
         type="button"
         onClick={() => onCycle(column)}
@@ -112,7 +122,7 @@ function SortHeader({
           {dir === "asc" ? "↑" : dir === "desc" ? "↓" : "↕"}
         </span>
       </button>
-    </th>
+    </DataTableHead>
   );
 }
 
@@ -192,81 +202,66 @@ export function EventTable({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-190 text-left text-sm">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-[0.14em] text-muted">
-              <SortHeader
-                label="Event"
-                column="name"
-                sort={sort}
-                onCycle={cycleSort}
-                className="px-5 py-2"
-              />
-              <SortHeader
-                label="Category"
-                column="category"
-                sort={sort}
-                onCycle={cycleSort}
-                className="px-3 py-2"
-              />
-              <SortHeader
-                label="Who"
-                column="who"
-                sort={sort}
-                onCycle={cycleSort}
-                className="px-3 py-2"
-              />
-              <SortHeader
-                label="Schedule"
-                column="schedule"
-                sort={sort}
-                onCycle={cycleSort}
-                className="px-3 py-2"
-              />
-              <SortHeader
-                label="Next / date"
-                column="next"
-                sort={sort}
-                onCycle={cycleSort}
-                className="px-3 py-2"
-              />
-              <SortHeader
-                label="Amount"
-                column="amount"
-                sort={sort}
-                onCycle={cycleSort}
-                className="px-5 py-2"
-                align="right"
-              />
-            </tr>
-          </thead>
-          <tbody>
+      <DataTableViewport>
+        <DataTable className="min-w-190">
+          <DataTableHeader>
+            <SortHeader
+              label="Event"
+              column="name"
+              sort={sort}
+              onCycle={cycleSort}
+              pad="edge"
+            />
+            <SortHeader
+              label="Category"
+              column="category"
+              sort={sort}
+              onCycle={cycleSort}
+            />
+            <SortHeader label="Who" column="who" sort={sort} onCycle={cycleSort} />
+            <SortHeader
+              label="Schedule"
+              column="schedule"
+              sort={sort}
+              onCycle={cycleSort}
+            />
+            <SortHeader
+              label="Next / date"
+              column="next"
+              sort={sort}
+              onCycle={cycleSort}
+            />
+            <SortHeader
+              label="Amount"
+              column="amount"
+              sort={sort}
+              onCycle={cycleSort}
+              pad="edge"
+              align="right"
+            />
+          </DataTableHeader>
+          <DataTableBody>
             {sortedRows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-5 py-7 text-center text-sm text-muted">
-                  {emptyLabel}
-                </td>
-              </tr>
+              <DataTableEmptyRow colSpan={6}>{emptyLabel}</DataTableEmptyRow>
             ) : (
               sortedRows.map(({ event, next }) => {
                 const delta = event.flow === "in" ? event.amount : -event.amount;
                 const category = categoryCell(event);
                 return (
-                  <tr
+                  <DataTableRow
                     key={event.id}
-                    className="cursor-pointer border-t border-rule/60 hover:bg-paper/70"
+                    interactive
                     onClick={() => onEdit(event)}
                   >
-                    <td className="px-5 py-3">
+                    <DataTableCell pad="edge">
                       <p className="font-medium">{event.name}</p>
                       {event.notes ? (
                         <p className="mt-0.5 max-w-md truncate text-xs text-muted">
                           {event.notes}
                         </p>
                       ) : null}
-                    </td>
-                    <td className="px-3 py-3">
+                    </DataTableCell>
+                    <DataTableCell>
                       <span className="inline-flex items-center gap-2">
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -274,26 +269,31 @@ export function EventTable({
                         />
                         {category.name}
                       </span>
-                    </td>
-                    <td className="px-3 py-3 text-muted">{personLabel(event.person)}</td>
-                    <td className="px-3 py-3">{cadenceLabel(event.cadence, event.kind)}</td>
-                    <td className="px-3 py-3 font-mono text-xs text-muted">
+                    </DataTableCell>
+                    <DataTableCell className="text-muted">
+                      {personLabel(event.person)}
+                    </DataTableCell>
+                    <DataTableCell>
+                      {cadenceLabel(event.cadence, event.kind)}
+                    </DataTableCell>
+                    <DataTableCell className="font-mono text-xs text-muted">
                       {next ? formatDate(next) : "—"}
-                    </td>
-                    <td
-                      className={`px-5 py-3 text-right font-mono text-sm font-medium ${
+                    </DataTableCell>
+                    <DataTableCell
+                      pad="edge"
+                      className={`text-right font-mono text-sm font-medium ${
                         event.flow === "in" ? "text-teal-deep" : "text-copper"
                       }`}
                     >
                       {formatMoney(delta, currency, { sign: true })}
-                    </td>
-                  </tr>
+                    </DataTableCell>
+                  </DataTableRow>
                 );
               })
             )}
-          </tbody>
-        </table>
-      </div>
+          </DataTableBody>
+        </DataTable>
+      </DataTableViewport>
       <p className="border-t border-rule px-5 py-2 text-xs text-muted">
         {forecast.occurrences.length} cash movements across this forecast horizon
       </p>
