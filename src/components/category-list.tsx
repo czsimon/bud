@@ -12,7 +12,14 @@ import {
   DataTableViewport,
 } from "@/components/data-table";
 import {
+  EditorFooter,
+  EditorSidebar,
+  ManagementHeader,
+} from "@/components/management-ui";
+import {
   CATEGORY_COLORS,
+  categoryColor,
+  categoryColorLabel,
   formatMoney,
   monthlyEquivalent,
   type BudgetEvent,
@@ -39,8 +46,7 @@ export function CategoryList({
   const [newColor, setNewColor] = useState<string>(CATEGORY_COLORS[0]);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editColor, setEditColor] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const rows = useMemo(() => {
     const sorted = [...categories].sort(
@@ -53,91 +59,73 @@ export function CategoryList({
     });
   }, [categories, events]);
 
-  async function addCategory(e: React.FormEvent) {
+  function startAdd() {
+    setEditingId("new");
+    setNewName("");
+    setNewColor(CATEGORY_COLORS[0]);
+    setError(null);
+  }
+
+  function startEdit(category: Category) {
+    setEditingId(category.id);
+    setNewName(category.name);
+    setNewColor(category.color);
+    setError(null);
+  }
+
+  async function saveCategory(e: React.FormEvent) {
     e.preventDefault();
     const name = newName.trim();
     if (!name) {
       setError("Give the category a name.");
       return;
     }
-    if (categories.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
-      setError("That category already exists.");
-      return;
-    }
-    setError(null);
-    const position =
-      categories.reduce((max, category) => Math.max(max, category.position), -1) + 1;
-    await onSave({ name, color: newColor, position });
-    setNewName("");
-  }
-
-  function startEdit(category: Category) {
-    setEditingId(category.id);
-    setEditName(category.name);
-    setEditColor(category.color);
-    setError(null);
-  }
-
-  async function commitEdit() {
-    if (!editingId) return;
     const current = categories.find((category) => category.id === editingId);
-    if (!current) return;
-    const name = editName.trim();
-    if (!name) {
-      setError("Give the category a name.");
-      return;
-    }
     const clash = categories.some(
       (category) =>
-        category.id !== editingId && category.name.toLowerCase() === name.toLowerCase(),
+        category.id !== current?.id &&
+        category.name.toLowerCase() === name.toLowerCase(),
     );
     if (clash) {
       setError("That category already exists.");
       return;
     }
+    setSaving(true);
     setError(null);
-    await onSave({
-      id: current.id,
-      name,
-      color: editColor,
-      position: current.position,
-    });
-    setEditingId(null);
+    try {
+      await onSave({
+        id: current?.id,
+        name,
+        color: newColor,
+        position:
+          current?.position ??
+          categories.reduce(
+            (max, category) => Math.max(max, category.position),
+            -1,
+          ) + 1,
+      });
+      setEditingId(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not save the category.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-surface">
-      <div className="border-b border-rule px-4 py-4 sm:px-5">
-        <h2 className="text-lg font-medium">Categories</h2>
-        <p className="text-sm text-muted">
-          Labels for expenses. Monthly totals come from recurring lines in each category.
-        </p>
-      </div>
-
-      <form
-        onSubmit={(e) => void addCategory(e)}
-        className="flex flex-wrap items-center gap-2 border-b border-rule bg-paper/30 px-4 py-3 sm:px-5"
-      >
-        <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted">
-          New category
-        </span>
-        <ColorSwatches value={newColor} onChange={setNewColor} />
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="Utilities, Home, Baby…"
-          className="field min-w-44 flex-1 py-1.5"
+    <>
+      <section className="flex min-h-0 flex-1 flex-col bg-surface">
+        <ManagementHeader
+          title="Categories"
+          description="Labels you invent. Monthly totals come from the budget lines and events you assign."
+          action={
+            <button type="button" className="btn-solid" onClick={startAdd}>
+              Add category
+            </button>
+          }
         />
-        <button type="submit" className="btn-ghost py-1.5">
-          Add category
-        </button>
-      </form>
-
-      {error ? (
-        <p className="border-b border-rule px-5 py-2 text-sm text-warn" role="alert">
-          {error}
-        </p>
-      ) : null}
 
       <DataTableViewport>
         <DataTable>
@@ -147,51 +135,28 @@ export function CategoryList({
             <DataTableHead pad="edge" className="text-right">
               Monthly
             </DataTableHead>
-            <DataTableHead pad="edge" className="w-24">
-              <span className="sr-only">Actions</span>
-            </DataTableHead>
           </DataTableHeader>
           <DataTableBody>
             {rows.length === 0 ? (
-              <DataTableEmptyRow colSpan={4}>
-                No categories yet. Add one to start grouping expenses.
+              <DataTableEmptyRow colSpan={3}>
+                No categories yet. Add one to start grouping budget lines and events.
               </DataTableEmptyRow>
             ) : (
               rows.map(({ category, count, monthly }) => {
-                const editing = editingId === category.id;
                 return (
-                  <DataTableRow key={category.id}>
+                  <DataTableRow
+                    key={category.id}
+                    interactive
+                    onClick={() => startEdit(category)}
+                  >
                     <DataTableCell pad="edge">
-                      {editing ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ColorSwatches value={editColor} onChange={setEditColor} />
-                          <input
-                            autoFocus
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                void commitEdit();
-                              }
-                              if (e.key === "Escape") setEditingId(null);
-                            }}
-                            className="field max-w-64 py-1.5"
-                          />
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => startEdit(category)}
-                          className="inline-flex items-center gap-2 text-left hover:text-teal-deep"
-                        >
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ background: category.color }}
-                          />
-                          {category.name}
-                        </button>
-                      )}
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ background: categoryColor(category.color) }}
+                        />
+                        <span className="font-medium">{category.name}</span>
+                      </span>
                     </DataTableCell>
                     <DataTableCell className="font-mono text-xs text-muted">
                       {count}
@@ -208,43 +173,6 @@ export function CategoryList({
                     >
                       {formatMoney(monthly, currency, { sign: monthly !== 0 })}
                     </DataTableCell>
-                    <DataTableCell pad="edge" className="text-right">
-                      {editing ? (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            className="text-xs text-muted hover:text-ink"
-                            onClick={() => setEditingId(null)}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="text-xs font-medium text-teal-deep hover:underline"
-                            onClick={() => void commitEdit()}
-                          >
-                            Save
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="text-xs text-warn hover:underline"
-                          onClick={async () => {
-                            if (
-                              !confirm(
-                                `Remove “${category.name}”? Linked expenses stay, uncategorized.`,
-                              )
-                            ) {
-                              return;
-                            }
-                            await onDelete(category.id);
-                          }}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </DataTableCell>
                   </DataTableRow>
                 );
               })
@@ -252,7 +180,66 @@ export function CategoryList({
           </DataTableBody>
         </DataTable>
       </DataTableViewport>
-    </section>
+      </section>
+
+      {editingId ? (
+        <EditorSidebar
+          eyebrow="Category"
+          title={editingId === "new" ? "New category" : "Edit category"}
+          onClose={() => setEditingId(null)}
+        >
+          <form
+            onSubmit={(event) => void saveCategory(event)}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-6 sm:px-6">
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium">Name</span>
+                <input
+                  autoFocus
+                  value={newName}
+                  onChange={(event) => setNewName(event.target.value)}
+                  placeholder="Utilities, Home, Baby…"
+                  className="field"
+                />
+              </label>
+              <fieldset>
+                <legend className="mb-2 text-sm font-medium">Color</legend>
+                <ColorSwatches value={newColor} onChange={setNewColor} />
+              </fieldset>
+              {error ? (
+                <p className="text-sm text-warn" role="alert">
+                  {error}
+                </p>
+              ) : null}
+            </div>
+            <EditorFooter
+              onCancel={() => setEditingId(null)}
+              onDelete={
+                editingId === "new"
+                  ? undefined
+                  : async () => {
+                      const category = categories.find(
+                        (item) => item.id === editingId,
+                      );
+                      if (
+                        !category ||
+                        !confirm(
+                          `Remove “${category.name}”? Linked expenses stay uncategorized.`,
+                        )
+                      )
+                        return;
+                      await onDelete(category.id);
+                      setEditingId(null);
+                    }
+              }
+              saving={saving}
+              saveLabel={editingId === "new" ? "Add category" : "Save changes"}
+            />
+          </form>
+        </EditorSidebar>
+      ) : null}
+    </>
   );
 }
 
@@ -264,19 +251,26 @@ function ColorSwatches({
   onChange: (color: string) => void;
 }) {
   return (
-    <div className="flex gap-1">
-      {CATEGORY_COLORS.map((swatch) => (
-        <button
-          key={swatch}
-          type="button"
-          aria-label={swatch}
-          onClick={() => onChange(swatch)}
-          className={`h-4 w-4 rounded-full border ${
-            value === swatch ? "border-ink" : "border-transparent"
-          }`}
-          style={{ background: swatch }}
-        />
-      ))}
+    <div className="flex flex-wrap gap-2">
+      {CATEGORY_COLORS.map((swatch) => {
+        const selected = value === swatch;
+        return (
+          <button
+            key={swatch}
+            type="button"
+            aria-label={categoryColorLabel(swatch)}
+            aria-pressed={selected}
+            title={categoryColorLabel(swatch)}
+            onClick={() => onChange(swatch)}
+            className={`flex h-10 w-10 items-center justify-center rounded-full text-base leading-none text-paper transition-transform hover:scale-105 ${
+              selected ? "ring-2 ring-ink ring-offset-2 ring-offset-surface" : ""
+            }`}
+            style={{ background: categoryColor(swatch) }}
+          >
+            {selected ? "✓" : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

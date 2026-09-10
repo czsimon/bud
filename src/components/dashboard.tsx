@@ -3,8 +3,9 @@
 import { addMonths, startOfDay } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { AccountList } from "@/components/account-list";
 import { CategoryList } from "@/components/category-list";
-import { EventDrawer } from "@/components/event-drawer";
+import { EventEditor } from "@/components/event-editor";
 import { EventTable } from "@/components/event-table";
 import { ForecastChart } from "@/components/forecast-chart";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -13,6 +14,8 @@ import * as remote from "@/lib/supabase/data";
 import {
   CATEGORY_COLORS,
   formatMoney,
+  type Account,
+  type AccountDraft,
   type BudgetEvent,
   type Category,
   type CategoryDraft,
@@ -21,7 +24,7 @@ import {
   type Profile,
 } from "@/lib/types";
 
-type Section = "budget" | "events" | "categories";
+type Section = "budget" | "events" | "accounts" | "categories";
 
 const HORIZON_OPTIONS = [
   { months: 12, label: "1 year" },
@@ -39,13 +42,13 @@ export function Dashboard({ email }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [events, setEvents] = useState<BudgetEvent[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [section, setSection] = useState<Section>("budget");
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetEvent | null>(null);
-  const [drawerKind, setDrawerKind] = useState<EventKind>("recurring");
-  const [balanceDraft, setBalanceDraft] = useState("");
+  const [editorKind, setEditorKind] = useState<EventKind>("recurring");
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +60,7 @@ export function Dashboard({ email }: Props) {
         setProfile(snap.profile);
         setEvents(snap.events);
         setCategories(snap.categories);
-        setBalanceDraft(String(snap.profile.startingBalance));
+        setAccounts(snap.accounts);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -80,15 +83,15 @@ export function Dashboard({ email }: Props) {
     }
     const from = startOfDay(new Date());
     const to = addMonths(from, profile.horizonMonths);
-    return buildForecast(events, profile.startingBalance, from, to);
-  }, [events, profile]);
+    return buildForecast(events, accounts, from, to);
+  }, [accounts, events, profile]);
 
   const budgetEvents = useMemo(
     () => events.filter((event) => event.kind === "recurring"),
     [events],
   );
   const oneOffEvents = useMemo(
-    () => events.filter((event) => event.kind === "one_off"),
+    () => events.filter((event) => event.kind !== "recurring"),
     [events],
   );
 
@@ -117,6 +120,22 @@ export function Dashboard({ email }: Props) {
   async function handleDelete(id: string) {
     await remote.deleteEvent(id);
     setEvents((prev) => prev.filter((e) => e.id !== id));
+  }
+
+  async function handleSaveAccount(draft: AccountDraft) {
+    if (!profile) throw new Error("Not signed in");
+    const saved = await remote.upsertAccount(draft, profile.id);
+    setAccounts((previous) => {
+      const exists = previous.some((account) => account.id === saved.id);
+      return exists
+        ? previous.map((account) => (account.id === saved.id ? saved : account))
+        : [...previous, saved];
+    });
+  }
+
+  async function handleDeleteAccount(id: string) {
+    await remote.deleteAccount(id);
+    setAccounts((previous) => previous.filter((account) => account.id !== id));
   }
 
   async function persistCategory(draft: CategoryDraft): Promise<Category> {
@@ -174,14 +193,14 @@ export function Dashboard({ email }: Props) {
 
   function openNew(kind: EventKind) {
     setEditing(null);
-    setDrawerKind(kind);
-    setDrawerOpen(true);
+    setEditorKind(kind);
+    setEditorOpen(true);
   }
 
   function openEdit(event: BudgetEvent) {
     setEditing(event);
-    setDrawerKind(event.kind);
-    setDrawerOpen(true);
+    setEditorKind(event.kind);
+    setEditorOpen(true);
   }
 
   async function handleSignOut() {
@@ -257,35 +276,8 @@ export function Dashboard({ email }: Props) {
             >
               {formatMoney(forecast.endBalance, profile.currency)}
             </p>
-            <p className="mt-1 text-sm text-muted">
-              from {formatMoney(forecast.startBalance, profile.currency)} today,
-              through the next{" "}
-              {HORIZON_OPTIONS.find(
-                (option) => option.months === profile.horizonMonths,
-              )?.label ?? `${profile.horizonMonths} months`}
-            </p>
           </div>
           <div className="flex flex-wrap items-end gap-3">
-            <label className="block">
-              <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
-                Cash on hand today
-              </span>
-              <input
-                type="number"
-                step="0.01"
-                value={balanceDraft}
-                onChange={(e) => setBalanceDraft(e.target.value)}
-                onBlur={() => {
-                  const value = Number(balanceDraft);
-                  if (Number.isFinite(value)) {
-                    void persistProfile({ ...profile, startingBalance: value });
-                  } else {
-                    setBalanceDraft(String(profile.startingBalance));
-                  }
-                }}
-                className="field w-40 font-mono"
-              />
-            </label>
             <div>
               <span className="mb-1 block text-[11px] uppercase tracking-[0.16em] text-muted">
                 Horizon
@@ -333,6 +325,7 @@ export function Dashboard({ email }: Props) {
             [
               { id: "budget", label: "Budget" },
               { id: "events", label: "Events" },
+              { id: "accounts", label: "Accounts" },
               { id: "categories", label: "Categories" },
             ] as const
           ).map((item) => {
@@ -373,15 +366,23 @@ export function Dashboard({ email }: Props) {
           {section === "events" ? (
             <EventTable
               title="Events"
-              description="One-off hits and windfalls on specific dates."
+              description="One-off hits, windfalls, and known net worth on a date."
               addLabel="Add event"
-              emptyLabel="No one-off events yet."
+              emptyLabel="No events yet."
               events={oneOffEvents}
               categories={categories}
               forecast={forecast}
               currency={profile.currency}
               onAdd={() => openNew("one_off")}
               onEdit={openEdit}
+            />
+          ) : null}
+          {section === "accounts" ? (
+            <AccountList
+              accounts={accounts}
+              currency={profile.currency}
+              onSave={handleSaveAccount}
+              onDelete={handleDeleteAccount}
             />
           ) : null}
           {section === "categories" ? (
@@ -396,17 +397,17 @@ export function Dashboard({ email }: Props) {
         </div>
       </div>
 
-      {drawerOpen ? (
-        <EventDrawer
-          key={editing?.id ?? `new-${drawerKind}`}
-          open
+      {editorOpen ? (
+        <EventEditor
+          key={editing?.id ?? `new-${editorKind}`}
           event={editing}
           categories={categories}
-          initialKind={drawerKind}
-          onClose={() => setDrawerOpen(false)}
+          initialKind={editorKind}
+          onClose={() => setEditorOpen(false)}
           onSave={handleSave}
           onCreateCategory={handleCreateCategory}
           onDelete={handleDelete}
+          currency={profile.currency}
         />
       ) : null}
     </div>

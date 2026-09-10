@@ -9,15 +9,9 @@ function cx(...classes: Array<string | undefined | false>) {
 // default `px-3` and leave the winner up to stylesheet order.
 type Pad = "cell" | "edge" | "none";
 
-const HEAD_PAD: Record<Pad, string> = {
+const PAD: Record<Pad, string> = {
   cell: "px-3 py-2",
   edge: "px-5 py-2",
-  none: "",
-};
-
-const CELL_PAD: Record<Pad, string> = {
-  cell: "px-3 py-3",
-  edge: "px-5 py-3",
   none: "",
 };
 
@@ -36,25 +30,14 @@ export function DataTable({ className, ...props }: ComponentProps<"table">) {
   );
 }
 
-type DataTableHeaderProps = Omit<ComponentProps<"thead">, "children"> & {
-  children: ReactNode;
-  rowClassName?: string;
-};
-
 export function DataTableHeader({
   children,
   className,
-  rowClassName,
   ...props
-}: DataTableHeaderProps) {
+}: ComponentProps<"thead">) {
   return (
     <thead className={className} {...props}>
-      <tr
-        className={cx(
-          "text-[11px] uppercase tracking-[0.14em] text-muted",
-          rowClassName,
-        )}
-      >
+      <tr className="text-[11px] uppercase tracking-[0.14em] text-muted">
         {children}
       </tr>
     </thead>
@@ -70,7 +53,7 @@ export function DataTableHead({
   return (
     <th
       scope={scope}
-      className={cx(HEAD_PAD[pad], "font-medium", className)}
+      className={cx(PAD[pad], "font-medium", className)}
       {...props}
     />
   );
@@ -106,7 +89,7 @@ export function DataTableCell({
   pad = "cell",
   ...props
 }: ComponentProps<"td"> & { pad?: Pad }) {
-  return <td className={cx(CELL_PAD[pad], className)} {...props} />;
+  return <td className={cx(PAD[pad], className)} {...props} />;
 }
 
 type DataTableEmptyRowProps = {

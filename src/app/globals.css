@@ -22,6 +22,24 @@
   /* Text/icons that sit on top of a --teal-deep fill. */
   --on-accent: light-dark(#f4faf8, #06211d);
   --scrim: light-dark(rgb(20 40 36 / 0.25), rgb(0 0 0 / 0.6));
+
+  /* Category palette. Both arms are read as a fill behind --paper text, so the
+     light arm stays dark enough for pale paper and the dark arm bright enough
+     for near-black paper. Categories store the name, never the hex. */
+  --cat-moss: light-dark(#3f6212, #a7d95e);
+  --cat-pine: light-dark(#0f766e, #5fd3bf);
+  --cat-sea: light-dark(#0369a1, #6cc4f5);
+  --cat-blue: light-dark(#1d4ed8, #93b4ff);
+  --cat-indigo: light-dark(#4338ca, #aca8ff);
+  --cat-violet: light-dark(#7c3aed, #c6a8ff);
+  --cat-plum: light-dark(#86198f, #eda4f2);
+  --cat-magenta: light-dark(#be185d, #ff9fc5);
+  --cat-crimson: light-dark(#b91c1c, #ff9f97);
+  --cat-rust: light-dark(#c0562a, #f2a37f);
+  --cat-amber: light-dark(#b45309, #f0b750);
+  --cat-olive: light-dark(#6b6410, #d6c95a);
+  --cat-stone: light-dark(#44403c, #c0b8af);
+  --cat-slate: light-dark(#475569, #adbdd0);
 }
 
 :root[data-theme="light"] {
@@ -90,7 +108,7 @@ select:disabled {
   border-radius: 0.375rem;
   border: 1px solid var(--rule);
   background: var(--surface);
-  padding: 0.5rem 0.7rem;
+  padding: 0.3rem 0.5rem;
   font-size: 0.9375rem;
   color: var(--ink);
   outline: none;
@@ -99,6 +117,164 @@ select:disabled {
 .field:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 70%, transparent);
+}
+
+.field[aria-invalid="true"] {
+  border-color: var(--warn);
+}
+
+/* Money entry. The symbol sits outside the input so the digits stay flush
+   against a single mono baseline, however long the number gets. */
+.money-shell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  padding: 0.5rem 0.8rem;
+}
+
+.money-shell:focus-within {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mint) 70%, transparent);
+}
+
+.money-shell[data-invalid="true"] {
+  border-color: var(--warn);
+}
+
+.money-shell-lg {
+  padding: 0.85rem 1rem;
+}
+
+.money-symbol {
+  font-family: var(--font-ibm), ui-monospace, monospace;
+  color: var(--muted);
+}
+
+.money-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: var(--ink);
+  font-family: var(--font-ibm), ui-monospace, monospace;
+  font-size: 1rem;
+}
+
+.money-input-lg {
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* Spinners add noise to money fields and are unusable for cents anyway. */
+.money-input::-webkit-outer-spin-button,
+.money-input::-webkit-inner-spin-button,
+.cell-input::-webkit-outer-spin-button,
+.cell-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.money-input[type="number"],
+.cell-input[type="number"] {
+  appearance: textfield;
+}
+
+/* Borderless cell input for the line-item rows, so the list reads as a
+   receipt rather than a stack of boxes. */
+.cell-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0.55rem 0.5rem;
+  font-size: 0.9375rem;
+  color: var(--ink);
+  outline: none;
+}
+
+.cell-input:focus {
+  background: var(--paper);
+  box-shadow: inset 0 -2px 0 var(--teal);
+}
+
+.cell-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 65%, transparent);
+}
+
+.icon-btn {
+  display: inline-flex;
+  height: 2.25rem;
+  width: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.icon-btn:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.icon-btn-danger:hover {
+  color: var(--warn);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.chip:hover {
+  border-color: var(--rule-strong);
+  color: var(--ink);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--teal-deep);
+  background: color-mix(in srgb, var(--mint) 55%, transparent);
+  color: var(--ink);
+}
+
+.drawer-panel {
+  animation: drawer-in 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawer-scrim {
+  animation: scrim-in 260ms ease-out;
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .btn-solid {
@@ -204,6 +380,20 @@ select:disabled {
 
 .chart-stroke-negative {
   stop-color: var(--danger);
+}
+
+/* Recharts makes the chart surface focusable for its keyboard layer, so a
+   pointer click lands a focus ring on it. Keep the ring for keyboard users,
+   who need it to navigate the points, and drop it for clicks. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

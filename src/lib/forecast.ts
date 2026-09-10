@@ -12,19 +12,22 @@ import {
   startOfDay,
 } from "date-fns";
 import type {
+  Account,
   BudgetEvent,
   Cadence,
   Forecast,
   ForecastOccurrence,
   ForecastPoint,
 } from "./types";
+import { eventAmount, roundMoney } from "./types";
 
 function toISODate(d: Date): string {
   return formatISO(startOfDay(d), { representation: "date" });
 }
 
 function signedAmount(event: BudgetEvent): number {
-  return event.flow === "in" ? event.amount : -event.amount;
+  const amount = eventAmount(event);
+  return event.flow === "in" ? amount : -amount;
 }
 
 function lastDayOfMonth(year: number, monthIndex: number): number {
@@ -86,7 +89,7 @@ export function eventOccurrences(
   const rangeFrom = startOfDay(from);
   const rangeTo = startOfDay(to);
 
-  if (event.kind === "one_off") {
+  if (event.kind === "one_off" || event.kind === "balance") {
     if (!isBefore(start, rangeFrom) && !isAfter(start, rangeTo)) {
       if (!end || !isAfter(start, end)) return [start];
     }
@@ -124,42 +127,101 @@ export function eventOccurrences(
 
 export function buildForecast(
   events: BudgetEvent[],
-  startingBalance: number,
+  accounts: Account[],
   from: Date,
   to: Date,
 ): Forecast {
   const rangeFrom = startOfDay(from);
   const rangeTo = startOfDay(to);
-  const occurrences: ForecastOccurrence[] = [];
+  const rangeFromIso = toISODate(rangeFrom);
+  const rangeToIso = toISODate(rangeTo);
 
-  for (const event of events) {
-    const delta = signedAmount(event);
-    for (const date of eventOccurrences(event, rangeFrom, rangeTo)) {
-      occurrences.push({
-        date: toISODate(date),
-        eventId: event.id,
-        name: event.name,
-        delta,
-      });
+  type Pending =
+    | { type: "start"; account: (typeof accounts)[number]; date: string }
+    | { type: "event"; event: BudgetEvent; date: string };
+  const pending: Pending[] = [];
+
+  for (const account of accounts) {
+    if (account.balanceDate <= rangeToIso) {
+      pending.push({ type: "start", account, date: account.balanceDate });
     }
   }
 
-  occurrences.sort((a, b) => {
-    if (a.date === b.date) return a.name.localeCompare(b.name);
-    return a.date.localeCompare(b.date);
+  const replayFrom = accounts.reduce((earliest, account) => {
+    const start = startOfDay(parseISO(account.balanceDate));
+    return isBefore(start, earliest) ? start : earliest;
+  }, rangeFrom);
+
+  for (const event of events) {
+    for (const date of eventOccurrences(event, replayFrom, rangeTo)) {
+      pending.push({ type: "event", event, date: toISODate(date) });
+    }
+  }
+
+  pending.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const order = (item: Pending) =>
+      item.type === "start" ? 0 : item.event.kind === "balance" ? 2 : 1;
+    const orderDiff = order(a) - order(b);
+    if (orderDiff !== 0) return orderDiff;
+    const aName = a.type === "start" ? a.account.name : a.event.name;
+    const bName = b.type === "start" ? b.account.name : b.event.name;
+    return aName.localeCompare(bName);
   });
 
+  const occurrences: ForecastOccurrence[] = [];
   const byDate = new Map<string, number>();
   let totalIn = 0;
   let totalOut = 0;
-  for (const occ of occurrences) {
-    byDate.set(occ.date, (byDate.get(occ.date) ?? 0) + occ.delta);
-    if (occ.delta >= 0) totalIn += occ.delta;
-    else totalOut += -occ.delta;
+  let running = 0;
+
+  function apply(item: Pending, record: boolean) {
+    let delta: number;
+    let eventId: string;
+    let name: string;
+    if (item.type === "start") {
+      delta = item.account.balance;
+      running = roundMoney(running + delta);
+      eventId = `account:${item.account.id}`;
+      name = `${item.account.name} starting balance`;
+    } else if (item.event.kind === "balance") {
+      const target = eventAmount(item.event);
+      delta = roundMoney(target - running);
+      running = target;
+      eventId = item.event.id;
+      name = item.event.name;
+    } else {
+      delta = signedAmount(item.event);
+      running = roundMoney(running + delta);
+      eventId = item.event.id;
+      name = item.event.name;
+    }
+    if (!record) return;
+    occurrences.push({
+      date: item.date,
+      eventId,
+      name,
+      delta,
+    });
+    byDate.set(item.date, (byDate.get(item.date) ?? 0) + delta);
+    if (item.type === "event" && item.event.kind !== "balance") {
+      if (delta >= 0) totalIn += delta;
+      else totalOut += -delta;
+    }
+  }
+
+  for (const item of pending) {
+    if (item.date < rangeFromIso) apply(item, false);
+  }
+
+  const startingBalance = running;
+
+  for (const item of pending) {
+    if (item.date >= rangeFromIso) apply(item, true);
   }
 
   const points: ForecastPoint[] = [
-    { date: toISODate(rangeFrom), balance: startingBalance },
+    { date: rangeFromIso, balance: startingBalance },
   ];
   let balance = startingBalance;
   const sortedDates = [...byDate.keys()].sort();
@@ -173,7 +235,7 @@ export function buildForecast(
     }
   }
 
-  const endDate = toISODate(rangeTo);
+  const endDate = rangeToIso;
   const last = points[points.length - 1];
   if (last.date !== endDate) {
     points.push({ date: endDate, balance });

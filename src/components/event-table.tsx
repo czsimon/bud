@@ -12,19 +12,22 @@ import {
   DataTableRow,
   DataTableViewport,
 } from "@/components/data-table";
+import { ManagementHeader } from "@/components/management-ui";
 import { eventOccurrences } from "@/lib/forecast";
 import {
   cadenceLabel,
+  categoryColor,
+  eventAmount,
   formatDate,
+  formatDateRange,
   formatMoney,
-  personLabel,
   type BudgetEvent,
   type Category,
   type Forecast,
 } from "@/lib/types";
 
 type Filter = "all" | "in" | "out";
-type SortColumn = "name" | "category" | "who" | "schedule" | "next" | "amount";
+type SortColumn = "name" | "category" | "schedule" | "next" | "amount";
 type SortDir = "asc" | "desc";
 type SortState = { column: SortColumn; dir: SortDir };
 
@@ -32,7 +35,7 @@ type Row = {
   event: BudgetEvent;
   next: string | null;
   categoryName: string;
-  who: string;
+  categoryFill: string;
   schedule: string;
   amount: number;
 };
@@ -75,12 +78,12 @@ function compareColumn(a: Row, b: Row, column: SortColumn) {
       return compareText(a.event.name, b.event.name);
     case "category":
       return compareText(a.categoryName, b.categoryName);
-    case "who":
-      return compareText(a.who, b.who);
     case "schedule":
       return compareText(a.schedule, b.schedule);
     case "next":
-      return (a.next ?? a.event.startDate).localeCompare(b.next ?? b.event.startDate);
+      return (a.next ?? a.event.startDate).localeCompare(
+        b.next ?? b.event.startDate,
+      );
     case "amount":
       return a.amount - b.amount;
   }
@@ -103,9 +106,14 @@ function SortHeader({
 }) {
   const active = sort?.column === column;
   const dir = active ? sort.dir : null;
-  const ariaSort = dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none";
+  const ariaSort =
+    dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none";
   const nextHint =
-    dir === "asc" ? "descending" : dir === "desc" ? "original order" : "ascending";
+    dir === "asc"
+      ? "descending"
+      : dir === "desc"
+        ? "original order"
+        : "ascending";
 
   return (
     <DataTableHead aria-sort={ariaSort} pad={pad}>
@@ -118,7 +126,9 @@ function SortHeader({
         } ${active ? "text-ink" : ""}`}
       >
         {label}
-        <span className={`font-mono text-[10px] ${active ? "text-ink" : "text-muted/50"}`}>
+        <span
+          className={`font-mono text-[10px] ${active ? "text-ink" : "text-muted/50"}`}
+        >
           {dir === "asc" ? "↑" : dir === "desc" ? "↓" : "↕"}
         </span>
       </button>
@@ -143,33 +153,41 @@ export function EventTable({
   const [filter, setFilter] = useState<Filter>("all");
   const [sort, setSort] = useState<SortState | null>(null);
 
-  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const categoryById = new Map(
+    categories.map((category) => [category.id, category]),
+  );
 
   function matchesFilter(event: BudgetEvent) {
     if (filter === "all") return true;
+    if (event.kind === "balance") return false;
     return event.flow === filter;
   }
 
   function categoryCell(event: BudgetEvent) {
-    if (event.flow === "in") {
-      return { name: "Income", color: "var(--teal)" };
+    if (event.kind === "balance") {
+      return { name: "Balance", color: "var(--teal-deep)" };
     }
-    const category = event.categoryId ? categoryById.get(event.categoryId) : undefined;
+    const category = event.categoryId
+      ? categoryById.get(event.categoryId)
+      : undefined;
     return category
-      ? { name: category.name, color: category.color }
+      ? { name: category.name, color: categoryColor(category.color) }
       : { name: "Uncategorized", color: "var(--muted)" };
   }
 
-  const rows = events
-    .filter(matchesFilter)
-    .map((event) => ({
+  const rows = events.filter(matchesFilter).map((event) => {
+    const category = categoryCell(event);
+    const amount = eventAmount(event);
+    return {
       event,
       next: nextDate(event, from, to),
-      categoryName: categoryCell(event).name,
-      who: personLabel(event.person),
+      categoryName: category.name,
+      categoryFill: category.color,
       schedule: cadenceLabel(event.cadence, event.kind),
-      amount: event.flow === "in" ? event.amount : -event.amount,
-    }));
+      amount:
+        event.kind === "balance" || event.flow === "in" ? amount : -amount,
+    };
+  });
 
   const sortedRows = [...rows].sort((a, b) => {
     const original = originalCompare(a, b);
@@ -189,18 +207,16 @@ export function EventTable({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-surface">
-      <div className="flex flex-col gap-3 border-b border-rule px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-        <div>
-          <h2 className="text-lg font-medium">{title}</h2>
-          <p className="text-sm text-muted">{description}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <FilterPills value={filter} onChange={setFilter} />
+      <ManagementHeader
+        title={title}
+        description={description}
+        aside={<FilterPills value={filter} onChange={setFilter} />}
+        action={
           <button type="button" className="btn-solid" onClick={onAdd}>
             {addLabel}
           </button>
-        </div>
-      </div>
+        }
+      />
 
       <DataTableViewport>
         <DataTable className="min-w-190">
@@ -218,7 +234,6 @@ export function EventTable({
               sort={sort}
               onCycle={cycleSort}
             />
-            <SortHeader label="Who" column="who" sort={sort} onCycle={cycleSort} />
             <SortHeader
               label="Schedule"
               column="schedule"
@@ -242,11 +257,16 @@ export function EventTable({
           </DataTableHeader>
           <DataTableBody>
             {sortedRows.length === 0 ? (
-              <DataTableEmptyRow colSpan={6}>{emptyLabel}</DataTableEmptyRow>
+              <DataTableEmptyRow colSpan={5}>{emptyLabel}</DataTableEmptyRow>
             ) : (
-              sortedRows.map(({ event, next }) => {
-                const delta = event.flow === "in" ? event.amount : -event.amount;
-                const category = categoryCell(event);
+              sortedRows.map(({ event, next, categoryName, categoryFill, amount }) => {
+                const isBalance = event.kind === "balance";
+                const when =
+                  event.kind === "one_off" || isBalance
+                    ? formatDateRange(event.startDate, event.endDate)
+                    : next
+                      ? formatDate(next)
+                      : "—";
                 return (
                   <DataTableRow
                     key={event.id}
@@ -255,6 +275,11 @@ export function EventTable({
                   >
                     <DataTableCell pad="edge">
                       <p className="font-medium">{event.name}</p>
+                      {event.lineItems.length > 0 ? (
+                        <p className="mt-0.5 max-w-md truncate text-xs text-muted">
+                          {event.lineItems.map((item) => item.name).join(" · ")}
+                        </p>
+                      ) : null}
                       {event.notes ? (
                         <p className="mt-0.5 max-w-md truncate text-xs text-muted">
                           {event.notes}
@@ -262,30 +287,35 @@ export function EventTable({
                       ) : null}
                     </DataTableCell>
                     <DataTableCell>
-                      <span className="inline-flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ background: category.color }}
-                        />
-                        {category.name}
+                      <span
+                        className="inline-flex items-center gap-2 w-full rounded-full px-2 py-1 text-xs font-medium"
+                        style={{
+                          background: categoryFill,
+                          color: "var(--paper)",
+                        }}
+                      >
+                        {categoryName}
                       </span>
-                    </DataTableCell>
-                    <DataTableCell className="text-muted">
-                      {personLabel(event.person)}
                     </DataTableCell>
                     <DataTableCell>
                       {cadenceLabel(event.cadence, event.kind)}
                     </DataTableCell>
                     <DataTableCell className="font-mono text-xs text-muted">
-                      {next ? formatDate(next) : "—"}
+                      {when}
                     </DataTableCell>
                     <DataTableCell
                       pad="edge"
                       className={`text-right font-mono text-sm font-medium ${
-                        event.flow === "in" ? "text-teal-deep" : "text-copper"
+                        isBalance
+                          ? "text-ink"
+                          : event.flow === "in"
+                            ? "text-teal-deep"
+                            : "text-copper"
                       }`}
                     >
-                      {formatMoney(delta, currency, { sign: true })}
+                      {isBalance
+                        ? formatMoney(amount, currency)
+                        : formatMoney(amount, currency, { sign: true })}
                     </DataTableCell>
                   </DataTableRow>
                 );
@@ -295,7 +325,8 @@ export function EventTable({
         </DataTable>
       </DataTableViewport>
       <p className="border-t border-rule px-5 py-2 text-xs text-muted">
-        {forecast.occurrences.length} cash movements across this forecast horizon
+        {forecast.occurrences.length} cash movements across this forecast
+        horizon
       </p>
     </section>
   );

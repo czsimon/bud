@@ -1,12 +1,18 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import type {
-  BudgetEvent,
-  Category,
-  CategoryDraft,
-  EventDraft,
-  Profile,
+import {
+  eventAmount,
+  roundMoney,
+  type Account,
+  type AccountDraft,
+  type AccountType,
+  type BudgetEvent,
+  type Category,
+  type CategoryDraft,
+  type EventDraft,
+  type EventLineItem,
+  type Profile,
 } from "@/lib/types";
 
 type ProfileRow = {
@@ -22,13 +28,22 @@ type EventRow = {
   name: string;
   amount: number | string;
   flow: "in" | "out";
-  kind: "recurring" | "one_off";
+  kind: BudgetEvent["kind"];
   cadence: BudgetEvent["cadence"];
   start_date: string;
   end_date: string | null;
-  person: string | null;
   notes: string | null;
   category_id?: string | null;
+  line_items?: unknown;
+};
+
+type AccountRow = {
+  id: string;
+  name: string;
+  type: AccountType;
+  balance: number | string;
+  balance_date: string;
+  position: number;
 };
 
 type CategoryRow = {
@@ -48,19 +63,53 @@ function mapProfile(row: ProfileRow): Profile {
   };
 }
 
+function mapLineItems(raw: unknown): EventLineItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    const amount = Number(record.amount);
+    if (!name || !Number.isFinite(amount) || amount <= 0) return [];
+    return [
+      {
+        id:
+          typeof record.id === "string" && record.id
+            ? record.id
+            : crypto.randomUUID(),
+        name,
+        amount: roundMoney(amount),
+      },
+    ];
+  });
+}
+
 function mapEvent(row: EventRow): BudgetEvent {
+  const lineItems = mapLineItems(row.line_items);
+  const amount = Number(row.amount);
   return {
     id: row.id,
     name: row.name,
-    amount: Number(row.amount),
+    amount: lineItems.length > 0 ? eventAmount({ amount, lineItems }) : amount,
+    lineItems,
     flow: row.flow,
     kind: row.kind,
     cadence: row.cadence,
     startDate: row.start_date,
     endDate: row.end_date,
-    person: row.person,
     notes: row.notes,
     categoryId: row.category_id ?? null,
+  };
+}
+
+function mapAccount(row: AccountRow): Account {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    balance: Number(row.balance),
+    balanceDate: row.balance_date,
+    position: row.position,
   };
 }
 
@@ -78,15 +127,27 @@ function eventToRow(event: BudgetEvent, userId: string) {
     id: event.id,
     user_id: userId,
     name: event.name,
-    amount: event.amount,
+    amount: eventAmount(event),
+    line_items: event.lineItems,
     flow: event.flow,
     kind: event.kind,
-    cadence: event.kind === "one_off" ? null : event.cadence,
+    cadence: event.kind === "recurring" ? event.cadence : null,
     start_date: event.startDate,
-    end_date: event.endDate,
-    person: event.person,
+    end_date: event.kind === "recurring" ? event.endDate : null,
     notes: event.notes,
-    category_id: event.flow === "out" ? event.categoryId : null,
+    category_id: event.kind === "balance" ? null : event.categoryId,
+  };
+}
+
+function accountToRow(account: Account, userId: string) {
+  return {
+    id: account.id,
+    user_id: userId,
+    name: account.name,
+    type: account.type,
+    balance: account.balance,
+    balance_date: account.balanceDate,
+    position: account.position,
   };
 }
 
@@ -104,6 +165,7 @@ export async function fetchHousehold(): Promise<{
   profile: Profile;
   events: BudgetEvent[];
   categories: Category[];
+  accounts: Account[];
 }> {
   const supabase = createClient();
   const {
@@ -118,6 +180,7 @@ export async function fetchHousehold(): Promise<{
     { data: profileRow, error: profileError },
     { data: eventRows, error: eventError },
     { data: categoryRows, error: categoryError },
+    { data: accountRows, error: accountError },
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
     supabase.from("events").select("*").eq("user_id", user.id).order("start_date"),
@@ -127,11 +190,18 @@ export async function fetchHousehold(): Promise<{
       .eq("user_id", user.id)
       .order("position")
       .order("name"),
+    supabase
+      .from("accounts")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("position")
+      .order("name"),
   ]);
 
   if (profileError) throw profileError;
   if (eventError) throw eventError;
   if (categoryError) throw categoryError;
+  if (accountError) throw accountError;
 
   let profile: Profile;
   if (!profileRow) {
@@ -142,31 +212,15 @@ export async function fetchHousehold(): Promise<{
       .single();
     if (insertError) throw insertError;
     profile = mapProfile(inserted as ProfileRow);
-    await supabase.rpc("seed_default_categories", { for_user: user.id });
   } else {
     profile = mapProfile(profileRow as ProfileRow);
-  }
-
-  let categories = ((categoryRows ?? []) as CategoryRow[]).map(mapCategory);
-  if (categories.length === 0) {
-    const { error: seedError } = await supabase.rpc("seed_default_categories", {
-      for_user: user.id,
-    });
-    if (seedError) throw seedError;
-    const { data: seeded, error: reloadError } = await supabase
-      .from("categories")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("position")
-      .order("name");
-    if (reloadError) throw reloadError;
-    categories = ((seeded ?? []) as CategoryRow[]).map(mapCategory);
   }
 
   return {
     profile,
     events: ((eventRows ?? []) as EventRow[]).map(mapEvent),
-    categories,
+    categories: ((categoryRows ?? []) as CategoryRow[]).map(mapCategory),
+    accounts: ((accountRows ?? []) as AccountRow[]).map(mapAccount),
   };
 }
 
@@ -186,11 +240,17 @@ export async function saveProfile(profile: Profile): Promise<void> {
 
 export async function upsertEvent(draft: EventDraft, userId: string): Promise<BudgetEvent> {
   const supabase = createClient();
+  const lineItems = draft.lineItems ?? [];
   const event: BudgetEvent = {
     ...draft,
     id: draft.id ?? crypto.randomUUID(),
-    cadence: draft.kind === "one_off" ? null : draft.cadence,
-    categoryId: draft.flow === "out" ? draft.categoryId : null,
+    lineItems: draft.kind === "balance" ? [] : lineItems,
+    amount:
+      draft.kind === "balance"
+        ? roundMoney(draft.amount)
+        : eventAmount({ amount: draft.amount, lineItems }),
+    cadence: draft.kind === "recurring" ? draft.cadence : null,
+    categoryId: draft.kind === "balance" ? null : draft.categoryId,
   };
   const { data, error } = await supabase
     .from("events")
@@ -204,6 +264,34 @@ export async function upsertEvent(draft: EventDraft, userId: string): Promise<Bu
 export async function deleteEvent(id: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("events").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function upsertAccount(
+  draft: AccountDraft,
+  userId: string,
+): Promise<Account> {
+  const supabase = createClient();
+  const account: Account = {
+    id: draft.id ?? crypto.randomUUID(),
+    name: draft.name.trim(),
+    type: draft.type,
+    balance: roundMoney(draft.balance),
+    balanceDate: draft.balanceDate,
+    position: draft.position,
+  };
+  const { data, error } = await supabase
+    .from("accounts")
+    .upsert(accountToRow(account, userId))
+    .select("*")
+    .single();
+  if (error) throw error;
+  return mapAccount(data as AccountRow);
+}
+
+export async function deleteAccount(id: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase.from("accounts").delete().eq("id", id);
   if (error) throw error;
 }
 
