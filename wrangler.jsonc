@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bud",
+  "account_id": "ac81b1f3f6dbd8849de516961352b8f4",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-09",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "bud",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+}
