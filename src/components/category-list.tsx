@@ -116,7 +116,7 @@ export function CategoryList({
 
   return (
     <>
-      <section className="flex min-h-0 flex-1 flex-col bg-surface">
+      <section className="@container flex min-h-0 flex-1 flex-col bg-surface">
         <ManagementHeader
           title="Categories"
           description="Labels you invent. Monthly totals come from the budget lines and events you assign."

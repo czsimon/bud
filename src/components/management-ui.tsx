@@ -14,13 +14,13 @@ export function ManagementHeader({
   aside?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 border-b border-rule px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-      <div>
+    <div className="flex shrink-0 flex-col gap-3 border-b border-rule px-4 py-4 @2xl:flex-row @2xl:items-center @2xl:justify-between @2xl:px-5">
+      <div className="min-w-0">
         <h2 className="text-lg font-medium">{title}</h2>
         <p className="text-sm text-muted">{description}</p>
       </div>
       {action || aside ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 @2xl:justify-end">
           {aside}
           {action}
         </div>

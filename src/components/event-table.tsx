@@ -23,7 +23,6 @@ import {
   formatMoney,
   type BudgetEvent,
   type Category,
-  type Forecast,
 } from "@/lib/types";
 
 type Filter = "all" | "in" | "out";
@@ -47,7 +46,6 @@ type Props = {
   emptyLabel: string;
   events: BudgetEvent[];
   categories: Category[];
-  forecast: Forecast;
   currency: string;
   onAdd: () => void;
   onEdit: (event: BudgetEvent) => void;
@@ -143,7 +141,6 @@ export function EventTable({
   emptyLabel,
   events,
   categories,
-  forecast,
   currency,
   onAdd,
   onEdit,
@@ -206,7 +203,7 @@ export function EventTable({
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-surface">
+    <section className="@container flex min-h-0 flex-col overflow-hidden rounded-lg border border-rule bg-surface xl:h-full">
       <ManagementHeader
         title={title}
         description={description}
@@ -219,7 +216,7 @@ export function EventTable({
       />
 
       <DataTableViewport>
-        <DataTable className="min-w-190">
+        <DataTable className="min-w-125">
           <DataTableHeader>
             <SortHeader
               label="Event"
@@ -259,75 +256,75 @@ export function EventTable({
             {sortedRows.length === 0 ? (
               <DataTableEmptyRow colSpan={5}>{emptyLabel}</DataTableEmptyRow>
             ) : (
-              sortedRows.map(({ event, next, categoryName, categoryFill, amount }) => {
-                const isBalance = event.kind === "balance";
-                const when =
-                  event.kind === "one_off" || isBalance
-                    ? formatDateRange(event.startDate, event.endDate)
-                    : next
-                      ? formatDate(next)
-                      : "—";
-                return (
-                  <DataTableRow
-                    key={event.id}
-                    interactive
-                    onClick={() => onEdit(event)}
-                  >
-                    <DataTableCell pad="edge">
-                      <p className="font-medium">{event.name}</p>
-                      {event.lineItems.length > 0 ? (
-                        <p className="mt-0.5 max-w-md truncate text-xs text-muted">
-                          {event.lineItems.map((item) => item.name).join(" · ")}
-                        </p>
-                      ) : null}
-                      {event.notes ? (
-                        <p className="mt-0.5 max-w-md truncate text-xs text-muted">
-                          {event.notes}
-                        </p>
-                      ) : null}
-                    </DataTableCell>
-                    <DataTableCell>
-                      <span
-                        className="inline-flex items-center gap-2 w-full rounded-full px-2 py-1 text-xs font-medium"
-                        style={{
-                          background: categoryFill,
-                          color: "var(--paper)",
-                        }}
-                      >
-                        {categoryName}
-                      </span>
-                    </DataTableCell>
-                    <DataTableCell>
-                      {cadenceLabel(event.cadence, event.kind)}
-                    </DataTableCell>
-                    <DataTableCell className="font-mono text-xs text-muted">
-                      {when}
-                    </DataTableCell>
-                    <DataTableCell
-                      pad="edge"
-                      className={`text-right font-mono text-sm font-medium ${
-                        isBalance
-                          ? "text-ink"
-                          : event.flow === "in"
-                            ? "text-teal-deep"
-                            : "text-copper"
-                      }`}
+              sortedRows.map(
+                ({ event, next, categoryName, categoryFill, amount }) => {
+                  const isBalance = event.kind === "balance";
+                  const when =
+                    event.kind === "one_off" || isBalance
+                      ? formatDateRange(event.startDate, event.endDate)
+                      : next
+                        ? formatDate(next)
+                        : "—";
+                  return (
+                    <DataTableRow
+                      key={event.id}
+                      interactive
+                      onClick={() => onEdit(event)}
                     >
-                      {isBalance
-                        ? formatMoney(amount, currency)
-                        : formatMoney(amount, currency, { sign: true })}
-                    </DataTableCell>
-                  </DataTableRow>
-                );
-              })
+                      <DataTableCell pad="edge">
+                        <p className="font-medium">{event.name}</p>
+                        {event.lineItems.length > 0 ? (
+                          <p className="mt-0.5 max-w-md truncate text-xs text-muted">
+                            {event.lineItems
+                              .map((item) => item.name)
+                              .join(" · ")}
+                          </p>
+                        ) : null}
+                        {event.notes ? (
+                          <p className="mt-0.5 max-w-md truncate text-xs text-muted">
+                            {event.notes}
+                          </p>
+                        ) : null}
+                      </DataTableCell>
+                      <DataTableCell>
+                        <span
+                          className="inline-flex items-center gap-2 w-full rounded-sm px-2 py-1 text-xs font-medium"
+                          style={{
+                            background: categoryFill,
+                            color: "var(--paper)",
+                          }}
+                        >
+                          {categoryName}
+                        </span>
+                      </DataTableCell>
+                      <DataTableCell>
+                        {cadenceLabel(event.cadence, event.kind)}
+                      </DataTableCell>
+                      <DataTableCell className="font-mono text-xs text-muted">
+                        {when}
+                      </DataTableCell>
+                      <DataTableCell
+                        pad="edge"
+                        className={`text-right font-mono text-xs font-medium ${
+                          isBalance
+                            ? "text-ink"
+                            : event.flow === "in"
+                              ? "text-teal-deep"
+                              : "text-copper"
+                        }`}
+                      >
+                        {isBalance
+                          ? formatMoney(amount, currency)
+                          : formatMoney(amount, currency, { sign: true })}
+                      </DataTableCell>
+                    </DataTableRow>
+                  );
+                },
+              )
             )}
           </DataTableBody>
         </DataTable>
       </DataTableViewport>
-      <p className="border-t border-rule px-5 py-2 text-xs text-muted">
-        {forecast.occurrences.length} cash movements across this forecast
-        horizon
-      </p>
     </section>
   );
 }

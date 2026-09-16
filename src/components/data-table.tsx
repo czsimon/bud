@@ -10,8 +10,8 @@ function cx(...classes: Array<string | undefined | false>) {
 type Pad = "cell" | "edge" | "none";
 
 const PAD: Record<Pad, string> = {
-  cell: "px-3 py-2",
-  edge: "px-5 py-2",
+  cell: "px-2 py-2",
+  edge: "px-2 py-2",
   none: "",
 };
 

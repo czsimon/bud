@@ -13,13 +13,14 @@ import {
 } from "date-fns";
 import type {
   Account,
+  AccountBalance,
   BudgetEvent,
   Cadence,
   Forecast,
   ForecastOccurrence,
   ForecastPoint,
 } from "./types";
-import { eventAmount, roundMoney } from "./types";
+import { eventAmount, roundMoney, sortAccountBalances } from "./types";
 
 function toISODate(d: Date): string {
   return formatISO(startOfDay(d), { representation: "date" });
@@ -77,6 +78,52 @@ function semimonthlyDates(start: Date, from: Date, to: Date, end: Date | null): 
   }
 
   return dates;
+}
+
+function owedOnDate(account: Account, date: string): number {
+  const latest = sortAccountBalances(account.balances, "desc").find(
+    (snapshot) => snapshot.asOf <= date,
+  );
+  return latest ? roundMoney(Math.abs(latest.amount)) : 0;
+}
+
+function monthlyFrom(start: Date, from: Date, to: Date): Date[] {
+  const dates: Date[] = [];
+  let cursor = startOfDay(start);
+  const rangeFrom = startOfDay(from);
+  const rangeTo = startOfDay(to);
+  let guard = 0;
+  while (isBefore(cursor, rangeFrom)) {
+    cursor = addCalendarMonths(cursor, 1, start.getDate());
+    if (++guard > 10000) break;
+  }
+  while (!isAfter(cursor, rangeTo)) {
+    dates.push(cursor);
+    cursor = addCalendarMonths(cursor, 1, start.getDate());
+    if (++guard > 10000) break;
+  }
+  return dates;
+}
+
+export function nextMonthlyOnOrAfter(startIso: string, fromIso: string): string {
+  const start = startOfDay(parseISO(startIso));
+  const from = startOfDay(parseISO(fromIso));
+  let cursor = start;
+  let guard = 0;
+  while (isBefore(cursor, from)) {
+    cursor = addCalendarMonths(cursor, 1, start.getDate());
+    if (++guard > 10000) break;
+  }
+  return toISODate(cursor);
+}
+
+function pendingName(item: {
+  type: "snapshot" | "event" | "payment";
+  account?: Account;
+  event?: BudgetEvent;
+}): string {
+  if (item.type === "event") return item.event?.name ?? "";
+  return item.account?.name ?? "";
 }
 
 export function eventOccurrences(
@@ -137,20 +184,52 @@ export function buildForecast(
   const rangeToIso = toISODate(rangeTo);
 
   type Pending =
-    | { type: "start"; account: (typeof accounts)[number]; date: string }
-    | { type: "event"; event: BudgetEvent; date: string };
+    | {
+        type: "snapshot";
+        account: Account;
+        snapshot: AccountBalance;
+        previousAmount: number | null;
+        date: string;
+      }
+    | { type: "event"; event: BudgetEvent; date: string }
+    | { type: "payment"; account: Account; amount: number; date: string };
   const pending: Pending[] = [];
 
+  let replayFrom = rangeFrom;
   for (const account of accounts) {
-    if (account.balanceDate <= rangeToIso) {
-      pending.push({ type: "start", account, date: account.balanceDate });
+    const snapshots = sortAccountBalances(account.balances, "asc").filter(
+      (snapshot) => snapshot.asOf <= rangeToIso,
+    );
+    let previousAmount: number | null = null;
+    for (const snapshot of snapshots) {
+      if (account.type !== "credit") {
+        pending.push({
+          type: "snapshot",
+          account,
+          snapshot,
+          previousAmount,
+          date: snapshot.asOf,
+        });
+        previousAmount = snapshot.amount;
+        const start = startOfDay(parseISO(snapshot.asOf));
+        if (isBefore(start, replayFrom)) replayFrom = start;
+      }
+    }
+
+    if (
+      account.type === "credit" &&
+      account.paymentDueDate &&
+      account.paymentDueDate <= rangeToIso
+    ) {
+      const dueStart = startOfDay(parseISO(account.paymentDueDate));
+      for (const date of monthlyFrom(dueStart, rangeFrom, rangeTo)) {
+        const iso = toISODate(date);
+        const amount = owedOnDate(account, iso);
+        if (amount <= 0) continue;
+        pending.push({ type: "payment", account, amount, date: iso });
+      }
     }
   }
-
-  const replayFrom = accounts.reduce((earliest, account) => {
-    const start = startOfDay(parseISO(account.balanceDate));
-    return isBefore(start, earliest) ? start : earliest;
-  }, rangeFrom);
 
   for (const event of events) {
     for (const date of eventOccurrences(event, replayFrom, rangeTo)) {
@@ -160,13 +239,14 @@ export function buildForecast(
 
   pending.sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
-    const order = (item: Pending) =>
-      item.type === "start" ? 0 : item.event.kind === "balance" ? 2 : 1;
+    const order = (item: Pending) => {
+      if (item.type === "snapshot") return 0;
+      if (item.type === "payment") return 1;
+      return item.event.kind === "balance" ? 2 : 1;
+    };
     const orderDiff = order(a) - order(b);
     if (orderDiff !== 0) return orderDiff;
-    const aName = a.type === "start" ? a.account.name : a.event.name;
-    const bName = b.type === "start" ? b.account.name : b.event.name;
-    return aName.localeCompare(bName);
+    return pendingName(a).localeCompare(pendingName(b));
   });
 
   const occurrences: ForecastOccurrence[] = [];
@@ -179,11 +259,20 @@ export function buildForecast(
     let delta: number;
     let eventId: string;
     let name: string;
-    if (item.type === "start") {
-      delta = item.account.balance;
+    if (item.type === "snapshot") {
+      const previous = item.previousAmount ?? 0;
+      delta = roundMoney(item.snapshot.amount - previous);
       running = roundMoney(running + delta);
-      eventId = `account:${item.account.id}`;
-      name = `${item.account.name} starting balance`;
+      eventId = `account:${item.account.id}:${item.snapshot.id}`;
+      name =
+        item.previousAmount == null
+          ? `${item.account.name} starting balance`
+          : `${item.account.name} balance`;
+    } else if (item.type === "payment") {
+      delta = roundMoney(-item.amount);
+      running = roundMoney(running + delta);
+      eventId = `account-payment:${item.account.id}:${item.date}`;
+      name = `${item.account.name} payment`;
     } else if (item.event.kind === "balance") {
       const target = eventAmount(item.event);
       delta = roundMoney(target - running);
@@ -204,7 +293,10 @@ export function buildForecast(
       delta,
     });
     byDate.set(item.date, (byDate.get(item.date) ?? 0) + delta);
-    if (item.type === "event" && item.event.kind !== "balance") {
+    if (
+      item.type === "payment" ||
+      (item.type === "event" && item.event.kind !== "balance")
+    ) {
       if (delta >= 0) totalIn += delta;
       else totalOut += -delta;
     }

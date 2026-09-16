@@ -5,6 +5,7 @@ import {
   eventAmount,
   roundMoney,
   type Account,
+  type AccountBalance,
   type AccountDraft,
   type AccountType,
   type BudgetEvent,
@@ -41,9 +42,15 @@ type AccountRow = {
   id: string;
   name: string;
   type: AccountType;
-  balance: number | string;
-  balance_date: string;
   position: number;
+  payment_due_date: string | null;
+  account_balances?: AccountBalanceRow[] | null;
+};
+
+type AccountBalanceRow = {
+  id: string;
+  as_of: string;
+  amount: number | string;
 };
 
 type CategoryRow = {
@@ -102,13 +109,21 @@ function mapEvent(row: EventRow): BudgetEvent {
   };
 }
 
+function mapAccountBalance(row: AccountBalanceRow): AccountBalance {
+  return {
+    id: row.id,
+    asOf: row.as_of,
+    amount: Number(row.amount),
+  };
+}
+
 function mapAccount(row: AccountRow): Account {
   return {
     id: row.id,
     name: row.name,
     type: row.type,
-    balance: Number(row.balance),
-    balanceDate: row.balance_date,
+    balances: (row.account_balances ?? []).map(mapAccountBalance),
+    paymentDueDate: row.payment_due_date,
     position: row.position,
   };
 }
@@ -145,9 +160,17 @@ function accountToRow(account: Account, userId: string) {
     user_id: userId,
     name: account.name,
     type: account.type,
-    balance: account.balance,
-    balance_date: account.balanceDate,
+    payment_due_date: account.type === "credit" ? account.paymentDueDate : null,
     position: account.position,
+  };
+}
+
+function balanceToRow(balance: AccountBalance, accountId: string) {
+  return {
+    id: balance.id,
+    account_id: accountId,
+    as_of: balance.asOf,
+    amount: roundMoney(balance.amount),
   };
 }
 
@@ -192,7 +215,7 @@ export async function fetchHousehold(): Promise<{
       .order("name"),
     supabase
       .from("accounts")
-      .select("*")
+      .select("*, account_balances(*)")
       .eq("user_id", user.id)
       .order("position")
       .order("name"),
@@ -276,17 +299,49 @@ export async function upsertAccount(
     id: draft.id ?? crypto.randomUUID(),
     name: draft.name.trim(),
     type: draft.type,
-    balance: roundMoney(draft.balance),
-    balanceDate: draft.balanceDate,
+    balances: draft.balances.map((balance) => ({
+      ...balance,
+      amount: roundMoney(balance.amount),
+    })),
+    paymentDueDate: draft.type === "credit" ? draft.paymentDueDate : null,
     position: draft.position,
   };
-  const { data, error } = await supabase
+  const { error: accountError } = await supabase
     .from("accounts")
-    .upsert(accountToRow(account, userId))
-    .select("*")
-    .single();
-  if (error) throw error;
-  return mapAccount(data as AccountRow);
+    .upsert(accountToRow(account, userId));
+  if (accountError) throw accountError;
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("account_balances")
+    .select("id")
+    .eq("account_id", account.id);
+  if (existingError) throw existingError;
+
+  const keep = new Set(account.balances.map((balance) => balance.id));
+  const toDelete = ((existingRows ?? []) as { id: string }[])
+    .map((row) => row.id)
+    .filter((id) => !keep.has(id));
+  if (toDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("account_balances")
+      .delete()
+      .in("id", toDelete);
+    if (deleteError) throw deleteError;
+  }
+
+  if (account.balances.length > 0) {
+    const { error: balanceError } = await supabase
+      .from("account_balances")
+      .upsert(account.balances.map((balance) => balanceToRow(balance, account.id)));
+    if (balanceError) {
+      if (balanceError.code === "23505") {
+        throw new Error("Each date can only have one balance.");
+      }
+      throw balanceError;
+    }
+  }
+
+  return account;
 }
 
 export async function deleteAccount(id: string): Promise<void> {

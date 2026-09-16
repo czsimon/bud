@@ -20,13 +20,25 @@ create table if not exists public.accounts (
   type text not null default 'bank' check (
     type in ('bank', 'cash', 'investment', 'credit', 'other')
   ),
-  balance numeric(14, 2) not null default 0,
-  balance_date date not null default current_date,
   position integer not null default 0,
+  payment_due_date date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint accounts_name_not_blank check (char_length(trim(name)) > 0),
-  constraint accounts_user_name_unique unique (user_id, name)
+  constraint accounts_user_name_unique unique (user_id, name),
+  constraint accounts_payment_due_credit_only check (
+    payment_due_date is null or type = 'credit'
+  )
+);
+
+create table if not exists public.account_balances (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references public.accounts (id) on delete cascade,
+  as_of date not null,
+  amount numeric(14, 2) not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint account_balances_account_date_unique unique (account_id, as_of)
 );
 
 create table if not exists public.events (
@@ -98,6 +110,8 @@ create index if not exists events_user_start_idx on public.events (user_id, star
 create index if not exists events_category_id_idx on public.events (category_id);
 create index if not exists categories_user_id_idx on public.categories (user_id, position);
 create index if not exists accounts_user_id_idx on public.accounts (user_id, position, name);
+create index if not exists account_balances_account_id_idx
+  on public.account_balances (account_id, as_of desc);
 
 create or replace function public.touch_updated_at()
 returns trigger
@@ -124,6 +138,11 @@ create trigger accounts_touch_updated_at
 before update on public.accounts
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists account_balances_touch_updated_at on public.account_balances;
+create trigger account_balances_touch_updated_at
+before update on public.account_balances
+for each row execute function public.touch_updated_at();
+
 drop trigger if exists categories_touch_updated_at on public.categories;
 create trigger categories_touch_updated_at
 before update on public.categories
@@ -135,6 +154,8 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  new_account_id uuid;
 begin
   insert into public.profiles (id, display_name)
   values (
@@ -144,8 +165,11 @@ begin
       split_part(new.email, '@', 1)
     )
   );
-  insert into public.accounts (user_id, name, type, balance, position)
-  values (new.id, 'Main account', 'bank', 0, 0);
+  insert into public.accounts (user_id, name, type, position)
+  values (new.id, 'Main account', 'bank', 0)
+  returning id into new_account_id;
+  insert into public.account_balances (account_id, as_of, amount)
+  values (new_account_id, current_date, 0);
   return new;
 end;
 $$;
@@ -161,6 +185,7 @@ alter table public.profiles enable row level security;
 alter table public.events enable row level security;
 alter table public.categories enable row level security;
 alter table public.accounts enable row level security;
+alter table public.account_balances enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own"
@@ -238,3 +263,54 @@ drop policy if exists "accounts_delete_own" on public.accounts;
 create policy "accounts_delete_own"
 on public.accounts for delete
 using ((select auth.uid()) = user_id);
+
+drop policy if exists "account_balances_select_own" on public.account_balances;
+create policy "account_balances_select_own"
+on public.account_balances for select
+using (
+  exists (
+    select 1 from public.accounts
+    where accounts.id = account_balances.account_id
+      and accounts.user_id = (select auth.uid())
+  )
+);
+
+drop policy if exists "account_balances_insert_own" on public.account_balances;
+create policy "account_balances_insert_own"
+on public.account_balances for insert
+with check (
+  exists (
+    select 1 from public.accounts
+    where accounts.id = account_balances.account_id
+      and accounts.user_id = (select auth.uid())
+  )
+);
+
+drop policy if exists "account_balances_update_own" on public.account_balances;
+create policy "account_balances_update_own"
+on public.account_balances for update
+using (
+  exists (
+    select 1 from public.accounts
+    where accounts.id = account_balances.account_id
+      and accounts.user_id = (select auth.uid())
+  )
+)
+with check (
+  exists (
+    select 1 from public.accounts
+    where accounts.id = account_balances.account_id
+      and accounts.user_id = (select auth.uid())
+  )
+);
+
+drop policy if exists "account_balances_delete_own" on public.account_balances;
+create policy "account_balances_delete_own"
+on public.account_balances for delete
+using (
+  exists (
+    select 1 from public.accounts
+    where accounts.id = account_balances.account_id
+      and accounts.user_id = (select auth.uid())
+  )
+);

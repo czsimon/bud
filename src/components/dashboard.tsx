@@ -24,7 +24,7 @@ import {
   type Profile,
 } from "@/lib/types";
 
-type Section = "budget" | "events" | "accounts" | "categories";
+type Section = "ledger" | "accounts" | "categories";
 
 const HORIZON_OPTIONS = [
   { months: 12, label: "1 year" },
@@ -45,7 +45,7 @@ export function Dashboard({ email }: Props) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [section, setSection] = useState<Section>("budget");
+  const [section, setSection] = useState<Section>("ledger");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<BudgetEvent | null>(null);
   const [editorKind, setEditorKind] = useState<EventKind>("recurring");
@@ -323,8 +323,7 @@ export function Dashboard({ email }: Props) {
         >
           {(
             [
-              { id: "budget", label: "Budget" },
-              { id: "events", label: "Events" },
+              { id: "ledger", label: "Budget & events" },
               { id: "accounts", label: "Accounts" },
               { id: "categories", label: "Categories" },
             ] as const
@@ -348,34 +347,38 @@ export function Dashboard({ email }: Props) {
           })}
         </nav>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface">
-          {section === "budget" ? (
-            <EventTable
-              title="Budget"
-              description="Recurring income and expenses. Edits move the forecast immediately."
-              addLabel="Add line"
-              emptyLabel="No budget lines yet. Add a salary, rent, or monthly expense."
-              events={budgetEvents}
-              categories={categories}
-              forecast={forecast}
-              currency={profile.currency}
-              onAdd={() => openNew("recurring")}
-              onEdit={openEdit}
-            />
-          ) : null}
-          {section === "events" ? (
-            <EventTable
-              title="Events"
-              description="One-off hits, windfalls, and known net worth on a date."
-              addLabel="Add event"
-              emptyLabel="No events yet."
-              events={oneOffEvents}
-              categories={categories}
-              forecast={forecast}
-              currency={profile.currency}
-              onAdd={() => openNew("one_off")}
-              onEdit={openEdit}
-            />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-paper">
+          {section === "ledger" ? (
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 sm:p-4 xl:overflow-hidden">
+              <div className="grid items-start gap-3 sm:gap-4 xl:min-h-0 xl:flex-1 xl:grid-cols-2 xl:items-stretch">
+                <EventTable
+                  title="Budget"
+                  description="Recurring income and expenses."
+                  addLabel="Add line"
+                  emptyLabel="No budget lines yet. Add a salary, rent, or monthly expense."
+                  events={budgetEvents}
+                  categories={categories}
+                  currency={profile.currency}
+                  onAdd={() => openNew("recurring")}
+                  onEdit={openEdit}
+                />
+                <EventTable
+                  title="Events"
+                  description="One-off hits, windfalls, and known balances."
+                  addLabel="Add event"
+                  emptyLabel="No events yet."
+                  events={oneOffEvents}
+                  categories={categories}
+                  currency={profile.currency}
+                  onAdd={() => openNew("one_off")}
+                  onEdit={openEdit}
+                />
+              </div>
+              <p className="shrink-0 text-xs text-muted">
+                {forecast.occurrences.length} cash movements across this
+                forecast horizon
+              </p>
+            </div>
           ) : null}
           {section === "accounts" ? (
             <AccountList

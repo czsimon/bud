@@ -54,16 +54,51 @@ export type EventLineItem = {
   amount: number;
 };
 
+export type AccountBalance = {
+  id: string;
+  asOf: string;
+  amount: number;
+};
+
 export type Account = {
   id: string;
   name: string;
   type: AccountType;
-  balance: number;
-  balanceDate: string;
+  balances: AccountBalance[];
+  paymentDueDate: string | null;
   position: number;
 };
 
 export type AccountDraft = Omit<Account, "id"> & { id?: string };
+
+export function sortAccountBalances(
+  balances: AccountBalance[],
+  direction: "asc" | "desc" = "desc",
+): AccountBalance[] {
+  const sign = direction === "desc" ? -1 : 1;
+  return [...balances].sort(
+    (a, b) => sign * a.asOf.localeCompare(b.asOf) || a.id.localeCompare(b.id),
+  );
+}
+
+export function latestAccountBalance(
+  account: Pick<Account, "balances">,
+): AccountBalance | null {
+  const [latest] = sortAccountBalances(account.balances, "desc");
+  return latest ?? null;
+}
+
+/** Credit is a liability: the stored amount is treated as owed. */
+export function signedAccountAmount(type: AccountType, amount: number): number {
+  if (type === "credit") return -Math.abs(amount);
+  return amount;
+}
+
+export function moneyToneClass(amount: number): string {
+  if (amount > 0) return "text-teal-deep";
+  if (amount < 0) return "text-copper";
+  return "text-ink";
+}
 
 export type BudgetEvent = {
   id: string;
@@ -117,7 +152,7 @@ export type Forecast = {
 
 const CADENCE_LABEL: Record<Cadence, string> = {
   weekly: "Weekly",
-  biweekly: "Every 2 weeks",
+  biweekly: "Biweekly",
   semimonthly: "1st & 15th",
   monthly: "Monthly",
   quarterly: "Quarterly",
@@ -176,9 +211,13 @@ export function roundMoney(value: number): number {
 }
 
 /** Stored amount, or the sum of line items when the event is itemized. */
-export function eventAmount(event: Pick<BudgetEvent, "amount" | "lineItems">): number {
+export function eventAmount(
+  event: Pick<BudgetEvent, "amount" | "lineItems">,
+): number {
   if (event.lineItems.length === 0) return event.amount;
-  return roundMoney(event.lineItems.reduce((sum, item) => sum + item.amount, 0));
+  return roundMoney(
+    event.lineItems.reduce((sum, item) => sum + item.amount, 0),
+  );
 }
 
 export function cadenceLabel(cadence: Cadence | null, kind: EventKind): string {
@@ -208,7 +247,10 @@ export function accountTypeLabel(type: AccountType): string {
 
 /** Approximate monthly cash effect of a recurring event. One-offs are 0. */
 export function monthlyEquivalent(
-  event: Pick<BudgetEvent, "amount" | "lineItems" | "flow" | "kind" | "cadence">,
+  event: Pick<
+    BudgetEvent,
+    "amount" | "lineItems" | "flow" | "kind" | "cadence"
+  >,
 ): number {
   const amount = eventAmount(event);
   const signed = event.flow === "in" ? amount : -amount;
