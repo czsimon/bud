@@ -34,7 +34,7 @@ export default function LoginPage() {
           password,
         });
         if (signInError) throw signInError;
-        router.replace("/");
+        router.replace("/short-term");
         router.refresh();
       }
     } catch (err) {

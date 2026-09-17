@@ -203,7 +203,7 @@ export function EventTable({
   }
 
   return (
-    <section className="@container flex min-h-0 flex-col overflow-hidden rounded-lg border border-rule bg-surface xl:h-full">
+    <section className="@container flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-rule bg-surface">
       <ManagementHeader
         title={title}
         description={description}

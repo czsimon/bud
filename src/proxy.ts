@@ -40,7 +40,7 @@ export async function proxy(request: NextRequest) {
 
   if (user && path === "/login") {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/";
+    redirectUrl.pathname = "/short-term";
     return NextResponse.redirect(redirectUrl);
   }
 

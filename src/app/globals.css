@@ -1,53 +1,40 @@
 @import "tailwindcss";
 
-/* Every color in the app comes from these tokens. `light-dark()` picks an arm
-   based on the used `color-scheme`, so the two rules below repaint the whole
-   app — no component ever needs a per-theme class. `data-theme="auto"` simply
-   leaves the inherited `light dark` in place and follows the OS. */
+/* Every color in the app comes from these tokens. Categories store the name,
+   never the hex. */
 :root {
-  color-scheme: light dark;
-
-  --paper: light-dark(#e4ece8, #0c1513);
-  --surface: light-dark(#f7faf8, #141f1c);
-  --ink: light-dark(#142824, #e3ece9);
-  --muted: light-dark(#5c7069, #90a49d);
-  --teal: light-dark(#1f7a6e, #3f9e8f);
-  --teal-deep: light-dark(#0f4f47, #74cdbb);
-  --mint: light-dark(#b7dcd4, #1b4a41);
-  --copper: light-dark(#c0562a, #e08a63);
-  --rule: light-dark(#c5d4cd, #2a3a35);
-  --rule-strong: light-dark(#9aa8a2, #354943);
-  --warn: light-dark(#8f3a2c, #f0907a);
-  --danger: light-dark(#dc2626, #ff7a6b);
-  /* Text/icons that sit on top of a --teal-deep fill. */
-  --on-accent: light-dark(#f4faf8, #06211d);
-  --scrim: light-dark(rgb(20 40 36 / 0.25), rgb(0 0 0 / 0.6));
-
-  /* Category palette. Both arms are read as a fill behind --paper text, so the
-     light arm stays dark enough for pale paper and the dark arm bright enough
-     for near-black paper. Categories store the name, never the hex. */
-  --cat-moss: light-dark(#3f6212, #a7d95e);
-  --cat-pine: light-dark(#0f766e, #5fd3bf);
-  --cat-sea: light-dark(#0369a1, #6cc4f5);
-  --cat-blue: light-dark(#1d4ed8, #93b4ff);
-  --cat-indigo: light-dark(#4338ca, #aca8ff);
-  --cat-violet: light-dark(#7c3aed, #c6a8ff);
-  --cat-plum: light-dark(#86198f, #eda4f2);
-  --cat-magenta: light-dark(#be185d, #ff9fc5);
-  --cat-crimson: light-dark(#b91c1c, #ff9f97);
-  --cat-rust: light-dark(#c0562a, #f2a37f);
-  --cat-amber: light-dark(#b45309, #f0b750);
-  --cat-olive: light-dark(#6b6410, #d6c95a);
-  --cat-stone: light-dark(#44403c, #c0b8af);
-  --cat-slate: light-dark(#475569, #adbdd0);
-}
-
-:root[data-theme="light"] {
   color-scheme: light;
-}
 
-:root[data-theme="dark"] {
-  color-scheme: dark;
+  --paper: #e4ece8;
+  --surface: #f7faf8;
+  --ink: #142824;
+  --muted: #5c7069;
+  --teal: #1f7a6e;
+  --teal-deep: #0f4f47;
+  --mint: #b7dcd4;
+  --copper: #c0562a;
+  --rule: #c5d4cd;
+  --rule-strong: #9aa8a2;
+  --warn: #8f3a2c;
+  --danger: #dc2626;
+  /* Text/icons that sit on top of a --teal-deep fill. */
+  --on-accent: #f4faf8;
+  --scrim: rgb(20 40 36 / 0.25);
+
+  --cat-moss: #3f6212;
+  --cat-pine: #0f766e;
+  --cat-sea: #0369a1;
+  --cat-blue: #1d4ed8;
+  --cat-indigo: #4338ca;
+  --cat-violet: #7c3aed;
+  --cat-plum: #86198f;
+  --cat-magenta: #be185d;
+  --cat-crimson: #b91c1c;
+  --cat-rust: #c0562a;
+  --cat-amber: #b45309;
+  --cat-olive: #6b6410;
+  --cat-stone: #44403c;
+  --cat-slate: #475569;
 }
 
 @theme inline {
@@ -304,26 +291,6 @@ select:disabled {
 
 .btn-ghost:hover {
   background: var(--paper);
-}
-
-/* The selected segment is keyed off <html data-theme> rather than React state
-   so the inline head script settles it before first paint. */
-.theme-option {
-  border-radius: 999px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.theme-option:hover {
-  color: var(--ink);
-}
-
-:root[data-theme="auto"] .theme-option[data-theme-value="auto"],
-:root[data-theme="light"] .theme-option[data-theme-value="light"],
-:root[data-theme="dark"] .theme-option[data-theme-value="dark"] {
-  background: var(--teal-deep);
-  color: var(--on-accent);
 }
 
 /* Recharts 3 puts the className we pass onto the painted node itself

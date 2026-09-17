@@ -17,6 +17,7 @@ import { formatMoney, type Forecast } from "@/lib/types";
 type Props = {
   forecast: Forecast;
   currency: string;
+  className?: string;
 };
 
 function ChartTooltip({
@@ -110,7 +111,11 @@ function axisBounds(min: number, max: number) {
   return { low, high, ticks };
 }
 
-export function ForecastChart({ forecast, currency }: Props) {
+export function ForecastChart({
+  forecast,
+  currency,
+  className = "h-[220px] w-full sm:h-[260px]",
+}: Props) {
   const data = useMemo(
     () =>
       forecast.points.map((p) => ({
@@ -153,7 +158,7 @@ export function ForecastChart({ forecast, currency }: Props) {
   const strokeSplit = zeroSplit(forecast.maxBalance, forecast.minBalance);
 
   return (
-    <div className="h-[220px] w-full sm:h-[260px]">
+    <div className={className}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
           <defs>
