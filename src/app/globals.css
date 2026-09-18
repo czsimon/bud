@@ -5,7 +5,7 @@
 :root {
   color-scheme: light;
 
-  --paper: #e4ece8;
+  --paper: #F0F0F0;
   --surface: #f7faf8;
   --ink: #142824;
   --muted: #5c7069;
@@ -349,18 +349,16 @@ select:disabled {
   stop-color: var(--danger);
 }
 
-/* Recharts makes the chart surface focusable for its keyboard layer, so a
-   pointer click lands a focus ring on it. Keep the ring for keyboard users,
-   who need it to navigate the points, and drop it for clicks. */
+/* Recharts makes the chart surface and its internals focusable. Drop the
+   ring so clicking or tabbing the graph does not draw a border. */
 .recharts-wrapper:focus,
-.recharts-surface:focus {
-  outline: none;
-}
-
 .recharts-wrapper:focus-visible,
-.recharts-surface:focus-visible {
-  outline: 2px solid var(--teal);
-  outline-offset: -2px;
+.recharts-surface:focus,
+.recharts-surface:focus-visible,
+.recharts-wrapper *:focus,
+.recharts-wrapper *:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

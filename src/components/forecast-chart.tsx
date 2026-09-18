@@ -160,7 +160,7 @@ export function ForecastChart({
   return (
     <div className={className}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 12, right: 8, left: 0, bottom: 0 }} accessibilityLayer={false}>
           <defs>
             <linearGradient id="cashFill" x1="0" y1="0" x2="0" y2="1">
               <stop offset={fillSplit} className="chart-fill-positive" />

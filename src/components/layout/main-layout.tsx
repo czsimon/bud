@@ -1,5 +1,9 @@
-import type { ReactNode } from "react";
-import { Header } from "@/components/layout/header";
+"use client";
+
+import { faBars } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { usePathname } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 
 export function MainLayout({
@@ -9,11 +13,47 @@ export function MainLayout({
   email: string | null;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   return (
-    <div className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden sm:grid-cols-[13rem_minmax(0,1fr)] sm:grid-rows-[auto_minmax(0,1fr)]">
-      <Header email={email} />
-      <Sidebar />
-      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-paper sm:col-start-2 sm:row-start-2">
+    <div className="flex h-dvh min-h-0 flex-col overflow-hidden md:flex-row">
+      <div className="flex shrink-0 items-center gap-1 border-b border-rule bg-paper px-2 py-2 md:hidden">
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Open menu"
+          aria-expanded={open}
+          aria-controls="app-sidebar"
+          onClick={() => setOpen(true)}
+        >
+          <FontAwesomeIcon icon={faBars} className="h-4 w-4" />
+        </button>
+        <p className="text-lg font-semibold tracking-tight">Bud</p>
+      </div>
+      {open ? (
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="drawer-scrim fixed inset-0 z-40 bg-scrim md:hidden"
+          onClick={() => setOpen(false)}
+        />
+      ) : null}
+      <Sidebar email={email} open={open} onClose={() => setOpen(false)} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-paper">
         {children}
       </div>
     </div>
